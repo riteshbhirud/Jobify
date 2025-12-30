@@ -1,15 +1,25 @@
 // frontend/app/page.tsx
 
-import { redirect } from 'next/navigation'
-import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { Hero } from "@/components/landing/Hero"
+import { Features } from "@/components/landing/Features"
+import { HowItWorks } from "@/components/landing/HowItWorks"
+import { Pricing } from "@/components/landing/Pricing"
+import { FAQ } from "@/components/landing/FAQ"
+import { Header } from "@/components/layout/Header"
+import { Footer } from "@/components/layout/Footer"
 
-export default async function Home() {
-  const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
-  if (user) {
-    redirect('/dashboard')
-  } else {
-    redirect('/auth/login')
-  }
+export default function Home() {
+  return (
+    <div className="min-h-screen flex flex-col">
+      <Header />
+      <main className="flex-1">
+        <Hero />
+        <Features />
+        <HowItWorks />
+        <Pricing />
+        <FAQ />
+      </main>
+      <Footer />
+    </div>
+  )
 }

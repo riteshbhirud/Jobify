@@ -31,16 +31,39 @@ export async function middleware(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
 
   // Protected routes - redirect to login if not authenticated
-  if (request.nextUrl.pathname.startsWith('/dashboard')) {
+  if (request.nextUrl.pathname.startsWith('/dashboard') || request.nextUrl.pathname.startsWith('/onboarding')) {
     if (!user) {
       return NextResponse.redirect(new URL('/auth/login', request.url))
     }
+
+    // Check onboarding status for dashboard access
+    if (request.nextUrl.pathname.startsWith('/dashboard')) {
+      const { data: profile } = await supabase
+        .from('users')
+        .select('onboarding_completed')
+        .eq('id', user.id)
+        .single()
+
+      if (!profile?.onboarding_completed) {
+        return NextResponse.redirect(new URL('/onboarding', request.url))
+      }
+    }
   }
 
-  // Auth routes - redirect to dashboard if already authenticated
+  // Auth routes - redirect based on onboarding status if already authenticated
   if (request.nextUrl.pathname === '/auth/login' || request.nextUrl.pathname === '/auth/signup') {
     if (user) {
-      return NextResponse.redirect(new URL('/dashboard', request.url))
+      const { data: profile } = await supabase
+        .from('users')
+        .select('onboarding_completed')
+        .eq('id', user.id)
+        .single()
+
+      if (profile?.onboarding_completed) {
+        return NextResponse.redirect(new URL('/dashboard', request.url))
+      } else {
+        return NextResponse.redirect(new URL('/onboarding', request.url))
+      }
     }
   }
 
@@ -48,5 +71,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/auth/login', '/auth/signup'],
+  matcher: ['/dashboard/:path*', '/auth/login', '/auth/signup', '/onboarding/:path*'],
 }
