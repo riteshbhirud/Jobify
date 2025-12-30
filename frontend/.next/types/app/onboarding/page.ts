@@ -1,4 +1,4 @@
-// File: /Users/ritesh/job/Jobify/frontend/app/onboarding/page.tsx
+// File: /Users/ritesh/jj/Jobify/frontend/app/onboarding/page.tsx
 import * as entry from '../../../../app/onboarding/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 
