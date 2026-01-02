@@ -1,17 +1,31 @@
 'use client'
 
-import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
-import { createClient } from "@/lib/supabase/client"
-import { ProgressBar } from "@/components/onboarding/ProgressBar"
-import { StepBasicInfo } from "@/components/onboarding/StepBasicInfo"
-import { StepLocation } from "@/components/onboarding/StepLocation"
-import { StepResume } from "@/components/onboarding/StepResume"
-import { StepPreferences } from "@/components/onboarding/StepPreferences"
-import { StepAutomation } from "@/components/onboarding/StepAutomation"
-import { CompletionScreen } from "@/components/onboarding/CompletionScreen"
-import { LoadingSpinner } from "@/components/shared/LoadingSpinner"
-import { Logo } from "@/components/shared/Logo"
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
+import { ProgressBar } from '@/components/onboarding/ProgressBar'
+import { StepPersonalInfo } from '@/components/onboarding/steps/StepPersonalInfo'
+import { StepEducation } from '@/components/onboarding/steps/StepEducation'
+import { StepExperience } from '@/components/onboarding/steps/StepExperience'
+import { StepSkillsAndProjects } from '@/components/onboarding/steps/StepSkillsAndProjects'
+import { StepResume } from '@/components/onboarding/steps/StepResume'
+import { StepPreferences } from '@/components/onboarding/steps/StepPreferences'
+import { StepAutomation } from '@/components/onboarding/steps/StepAutomation'
+import { CompletionScreen } from '@/components/onboarding/CompletionScreen'
+import { LoadingSpinner } from '@/components/shared/LoadingSpinner'
+import { Logo } from '@/components/shared/Logo'
+
+const TOTAL_STEPS = 7
+
+const STEP_TITLES = [
+  'Personal Information',
+  'Education',
+  'Work Experience',
+  'Skills & Projects',
+  'Resume',
+  'Job Preferences',
+  'Automation Settings',
+]
 
 export default function OnboardingPage() {
   const [currentStep, setCurrentStep] = useState(1)
@@ -19,6 +33,7 @@ export default function OnboardingPage() {
   const [saving, setSaving] = useState(false)
   const [userData, setUserData] = useState<any>({})
   const [userId, setUserId] = useState<string | null>(null)
+  const [userEmail, setUserEmail] = useState<string>('')
 
   const router = useRouter()
   const supabase = createClient()
@@ -29,13 +44,16 @@ export default function OnboardingPage() {
 
   const loadUserData = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
       if (!user) {
         router.push('/auth/login')
         return
       }
 
       setUserId(user.id)
+      setUserEmail(user.email || '')
 
       const { data: profile } = await supabase
         .from('users')
@@ -71,6 +89,7 @@ export default function OnboardingPage() {
         .update({
           ...data,
           onboarding_step: nextStep,
+          updated_at: new Date().toISOString(),
         })
         .eq('id', userId)
 
@@ -78,6 +97,9 @@ export default function OnboardingPage() {
 
       setUserData({ ...userData, ...data })
       setCurrentStep(nextStep)
+
+      // Scroll to top when changing steps
+      window.scrollTo({ top: 0, behavior: 'smooth' })
     } catch (error: any) {
       console.error('Error saving data:', error)
       alert('Failed to save data. Please try again.')
@@ -95,16 +117,17 @@ export default function OnboardingPage() {
         .from('users')
         .update({
           ...data,
-          onboarding_step: 6,
+          onboarding_step: TOTAL_STEPS + 1,
           onboarding_completed: true,
-          is_active: true,
+          is_active: false, // User will manually activate from dashboard
+          updated_at: new Date().toISOString(),
         })
         .eq('id', userId)
 
       if (error) throw error
 
       setUserData({ ...userData, ...data })
-      setCurrentStep(6)
+      setCurrentStep(TOTAL_STEPS + 1) // Show completion screen
     } catch (error: any) {
       console.error('Error completing onboarding:', error)
       alert('Failed to complete onboarding. Please try again.')
@@ -123,7 +146,11 @@ export default function OnboardingPage() {
     }
 
     // Validate file type
-    const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+    const allowedTypes = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ]
     if (!allowedTypes.includes(file.type)) {
       throw new Error('Only PDF, DOC, and DOCX files are allowed')
     }
@@ -135,12 +162,10 @@ export default function OnboardingPage() {
     const filePath = `${userId}/${fileName}`
 
     // Upload to Supabase Storage
-    const { data, error } = await supabase.storage
-      .from('resumes')
-      .upload(filePath, file, {
-        upsert: true,
-        contentType: file.type
-      })
+    const { data, error } = await supabase.storage.from('resumes').upload(filePath, file, {
+      upsert: true,
+      contentType: file.type,
+    })
 
     if (error) {
       console.error('Upload error:', error)
@@ -148,13 +173,11 @@ export default function OnboardingPage() {
     }
 
     // Get the public URL
-    const { data: urlData } = supabase.storage
-      .from('resumes')
-      .getPublicUrl(filePath)
+    const { data: urlData } = supabase.storage.from('resumes').getPublicUrl(filePath)
 
     return {
       url: urlData.publicUrl,
-      filename: file.name // Keep original filename for display
+      filename: file.name, // Keep original filename for display
     }
   }
 
@@ -166,27 +189,39 @@ export default function OnboardingPage() {
     )
   }
 
+  const isCompleted = currentStep > TOTAL_STEPS
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-primary/5 to-background py-12 px-4">
+    <div className="min-h-screen bg-gradient-to-b from-primary/5 via-background to-background py-8 px-4">
       <div className="container mx-auto max-w-4xl">
-        <div className="text-center mb-12">
+        {/* Header */}
+        <div className="text-center mb-8">
           <Logo className="inline-block mb-4" />
-          <h1 className="text-3xl font-bold mb-2">Welcome to Jobify</h1>
-          <p className="text-muted-foreground">Let's get you set up in just a few minutes</p>
+          {!isCompleted && (
+            <>
+              <h1 className="text-2xl md:text-3xl font-bold mb-2">{STEP_TITLES[currentStep - 1]}</h1>
+              <p className="text-muted-foreground">
+                Step {currentStep} of {TOTAL_STEPS}
+              </p>
+            </>
+          )}
         </div>
 
-        {currentStep < 6 && <ProgressBar currentStep={currentStep} totalSteps={5} />}
+        {/* Progress Bar */}
+        {!isCompleted && <ProgressBar currentStep={currentStep} totalSteps={TOTAL_STEPS} />}
 
+        {/* Step Components */}
         {currentStep === 1 && (
-          <StepBasicInfo
+          <StepPersonalInfo
             initialData={userData}
+            userEmail={userEmail}
             onNext={(data) => saveData(data, 2)}
             loading={saving}
           />
         )}
 
         {currentStep === 2 && (
-          <StepLocation
+          <StepEducation
             initialData={userData}
             onNext={(data) => saveData(data, 3)}
             onBack={() => setCurrentStep(1)}
@@ -195,17 +230,16 @@ export default function OnboardingPage() {
         )}
 
         {currentStep === 3 && (
-          <StepResume
+          <StepExperience
             initialData={userData}
             onNext={(data) => saveData(data, 4)}
             onBack={() => setCurrentStep(2)}
-            onUpload={handleResumeUpload}
             loading={saving}
           />
         )}
 
         {currentStep === 4 && (
-          <StepPreferences
+          <StepSkillsAndProjects
             initialData={userData}
             onNext={(data) => saveData(data, 5)}
             onBack={() => setCurrentStep(3)}
@@ -214,17 +248,34 @@ export default function OnboardingPage() {
         )}
 
         {currentStep === 5 && (
-          <StepAutomation
+          <StepResume
             initialData={userData}
-            onNext={(data) => completeOnboarding(data)}
+            onNext={(data) => saveData(data, 6)}
             onBack={() => setCurrentStep(4)}
+            onUpload={handleResumeUpload}
             loading={saving}
           />
         )}
 
         {currentStep === 6 && (
-          <CompletionScreen userData={userData} />
+          <StepPreferences
+            initialData={userData}
+            onNext={(data) => saveData(data, 7)}
+            onBack={() => setCurrentStep(5)}
+            loading={saving}
+          />
         )}
+
+        {currentStep === 7 && (
+          <StepAutomation
+            initialData={userData}
+            onNext={(data) => completeOnboarding(data)}
+            onBack={() => setCurrentStep(6)}
+            loading={saving}
+          />
+        )}
+
+        {isCompleted && <CompletionScreen userData={userData} />}
       </div>
     </div>
   )
