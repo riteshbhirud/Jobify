@@ -2,7 +2,6 @@
 
 import { redirect } from 'next/navigation'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
-import { DashboardLayout } from '@/components/layout/DashboardLayout'
 import { DashboardClient } from './DashboardClient'
 
 export default async function DashboardPage() {
@@ -36,24 +35,22 @@ export default async function DashboardPage() {
   }
 
   return (
-    <DashboardLayout user={user}>
-      <div className="container mx-auto px-6 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">
-            Welcome back, {profile.first_name || 'there'}! 👋
-          </h1>
-          <p className="text-muted-foreground">
-            Track your automated job applications and manage your settings
-          </p>
-        </div>
-
-        <DashboardClient
-          userId={user.id}
-          isActive={profile.is_active || false}
-          stats={stats}
-          applications={applications}
-        />
+    <div className="container mx-auto px-6 py-8">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold mb-2">
+          Welcome back, {profile.first_name || 'there'}! 👋
+        </h1>
+        <p className="text-muted-foreground">
+          Track your automated job applications and manage your settings
+        </p>
       </div>
-    </DashboardLayout>
+
+      <DashboardClient
+        userId={user.id}
+        isActive={profile.is_active || false}
+        stats={stats}
+        applications={applications}
+      />
+    </div>
   )
 }

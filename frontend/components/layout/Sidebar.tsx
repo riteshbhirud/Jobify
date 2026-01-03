@@ -7,6 +7,7 @@ import { Logo } from "@/components/shared/Logo"
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: '📊' },
+  { name: 'Job Board', href: '/dashboard/jobs', icon: '💼' },
   { name: 'Applications', href: '/dashboard/applications', icon: '📝' },
   { name: 'Profile', href: '/dashboard/profile', icon: '👤' },
   { name: 'Settings', href: '/dashboard/settings', icon: '⚙️' },

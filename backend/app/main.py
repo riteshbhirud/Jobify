@@ -3,7 +3,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
-from app.routers import users
+from app.routers import users, jobs
+from app.scheduler import start_scheduler
 
 settings = get_settings()
 
@@ -26,6 +27,12 @@ app.add_middleware(
 
 # Routers
 app.include_router(users.router, prefix="/api/users", tags=["users"])
+app.include_router(jobs.router, prefix="/api/jobs", tags=["jobs"])
+
+# Start the background scheduler
+@app.on_event("startup")
+async def startup_event():
+    start_scheduler()
 
 @app.get("/health")
 async def health():
