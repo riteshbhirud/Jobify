@@ -4,24 +4,38 @@ This guide explains how to set up and use the automated job scraping feature in 
 
 ## Overview
 
-The job scraping feature uses the **JSearch API** (via OpenWeb Ninja/RapidAPI) to automatically fetch job postings every hour. The jobs are displayed in a clean, filterable table on the Job Board page.
+The job scraping feature aggregates job postings from **multiple APIs** to provide comprehensive job listings:
+- **JSearch API** (RapidAPI) - Real-time jobs from Google for Jobs and other sources
+- **Findwork API** - Developer-focused job board (free tier available)
+
+Jobs are automatically fetched every hour and displayed in a clean, filterable table on the Job Board page.
 
 ## Features
 
+- **Multi-Source Aggregation**: Fetches from multiple APIs in parallel for maximum coverage
+- **Automatic Deduplication**: Removes duplicate listings across sources
 - **Automatic Scraping**: Jobs are scraped every hour in the background
 - **Manual Refresh**: Users can manually trigger a job scrape
-- **Real-time Data**: Fetches jobs from Google for Jobs and other public sources
+- **Real-time Data**: Fetches jobs from Google for Jobs, Findwork, and other sources
 - **Rich Metadata**: Includes salary, location, employment type, remote status, and more
+- **Source Tracking**: See which API each job came from
+- **API Health Monitoring**: View status of each data source
 - **Beautiful UI**: Jobs displayed in a responsive table with company logos
 
 ## Setup Instructions
 
-### 1. Get Your JSearch API Key
+### 1. Get Your API Keys
 
+#### JSearch API (Required)
 1. Go to [RapidAPI JSearch](https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch)
 2. Sign up for a free RapidAPI account if you don't have one
 3. Subscribe to the JSearch API (there's a free tier available)
 4. Copy your API key from the "X-RapidAPI-Key" header
+
+#### Findwork API (Optional - works without it)
+1. Go to [Findwork Developers](https://findwork.dev/developers/)
+2. Create an account if needed
+3. Generate an API token (optional - the API works without authentication but has lower rate limits)
 
 ### 2. Configure Backend
 
@@ -30,18 +44,18 @@ The job scraping feature uses the **JSearch API** (via OpenWeb Ninja/RapidAPI) t
    cd backend
    ```
 
-2. Create a `.env` file (copy from `.env.example`):
-   ```bash
-   cp .env.example .env
-   ```
-
-3. Edit `.env` and add your API key:
+2. Edit your `.env` file and add the API keys:
    ```env
-   JSEARCH_API_KEY=your_actual_api_key_here
+   # Required
+   JSEARCH_API_KEY=your_actual_jsearch_key_here
+
+   # Optional - leave empty if you don't have one
+   FINDWORK_API_KEY=your_findwork_key_here_or_leave_empty
+
    APP_ENV=development
    ```
 
-4. Install Python dependencies:
+3. Install Python dependencies:
    ```bash
    pip install -r requirements.txt
    ```
@@ -96,25 +110,34 @@ INFO: Successfully scraped 30 jobs at 2026-01-02 20:00:00
 
 ### Backend Endpoints
 
-- `GET /api/jobs/search` - Search for jobs with custom parameters
-  - Query params: `query`, `location`, `num_pages`, `employment_types`, `remote_jobs_only`
+- `GET /api/jobs/search` - Search for jobs from all sources with custom parameters
+  - Query params: `query`, `location`, `num_pages`, `remote_jobs_only`
+  - Returns: Jobs from JSearch + Findwork, deduplicated
 
 - `GET /api/jobs/cached` - Get cached jobs from the last scrape
+  - Includes API source statistics
 
-- `POST /api/jobs/scrape` - Manually trigger a job scrape
+- `POST /api/jobs/scrape` - Manually trigger a job scrape from all sources
   - Query params: `query`, `location`, `num_pages`
+  - Fetches from all APIs in parallel
 
-### Example API Call
+- `GET /api/jobs/stats` - Get statistics about API sources
+  - Shows health status and job counts per source
+
+### Example API Calls
 
 ```bash
-# Search for remote Python jobs
+# Search for remote Python jobs from all sources
 curl "http://localhost:8000/api/jobs/search?query=python%20developer&remote_jobs_only=true&num_pages=2"
 
-# Get cached jobs
+# Get cached jobs with source statistics
 curl "http://localhost:8000/api/jobs/cached"
 
-# Trigger manual scrape
+# Trigger manual scrape from all sources
 curl -X POST "http://localhost:8000/api/jobs/scrape?query=software%20engineer&num_pages=3"
+
+# Get API health statistics
+curl "http://localhost:8000/api/jobs/stats"
 ```
 
 ## Customization
@@ -125,10 +148,10 @@ Edit `backend/app/scheduler.py` to customize what jobs are scraped:
 
 ```python
 async def scrape_jobs_task():
-    jobs = await fetch_jobs_from_jsearch(
+    jobs = await aggregate_jobs_from_all_sources(
         query="data scientist",           # Change job type
         location="New York, NY",          # Change location
-        num_pages=5,                      # Change number of results
+        num_pages=5,                      # Change number of results (for JSearch)
         remote_jobs_only=True            # Only remote jobs
     )
 ```
@@ -149,17 +172,33 @@ scheduler.add_job(
 
 ### No jobs appearing
 
-1. Check that your API key is correct in `.env`
+1. Check that your JSearch API key is correct in `.env`
 2. Look at backend logs for errors
 3. Make sure the backend is running on port 8000
 4. Try manually triggering a scrape with the "Refresh Jobs" button
+5. Check the "Data Sources" section on the job board to see API health status
 
 ### API Rate Limits
 
-The free tier of JSearch API has limits. If you hit the limit:
-- Wait for the limit to reset (usually monthly)
-- Reduce scraping frequency
-- Upgrade your RapidAPI plan
+**JSearch API (RapidAPI):**
+- Free tier has limits (usually 100-500 requests/month)
+- If you hit the limit:
+  - Wait for the limit to reset (usually monthly)
+  - Reduce scraping frequency
+  - Upgrade your RapidAPI plan
+
+**Findwork API:**
+- Works without authentication but has rate limits
+- Add an API key to increase rate limits
+- Generally more generous limits than JSearch
+
+### One API failing
+
+The system is designed to work even if one API fails:
+- Jobs will still appear from working APIs
+- Check the "Data Sources" section to see which APIs are working
+- Error status will show a red dot
+- Check backend logs for specific error messages
 
 ### CORS Errors
 
@@ -167,16 +206,39 @@ If you see CORS errors in the browser console:
 1. Ensure the backend is running on `localhost:8000`
 2. Check that CORS is properly configured in `backend/app/main.py`
 
-## API Alternatives
+## How It Works
 
-If you want to try other job APIs, you can swap out the JSearch implementation:
+### Multi-API Aggregation
 
-1. **Mantiks Job Postings API** - Better for enriched metadata
-2. **APIJobs.dev** - Enterprise-grade with advanced filtering
-3. **Simple Job Data API** - No throttle limits
-4. **Findwork API** - Developer-focused jobs
+The system uses a smart aggregation strategy:
 
-Just update the API calls in `backend/app/routers/jobs.py` to match the new API's format.
+1. **Parallel Fetching**: Both APIs are called simultaneously using `asyncio.gather()`
+2. **Error Handling**: If one API fails, the other continues working
+3. **Deduplication**: Jobs are deduplicated based on title + company name
+4. **Source Tracking**: Each job is tagged with its source API
+5. **Statistics**: Real-time monitoring of each API's health and contribution
+
+### Adding More APIs
+
+Want to add more job APIs? Here's how:
+
+1. Create a new fetch function in `backend/app/routers/jobs.py`:
+```python
+async def fetch_jobs_from_newapi(...):
+    # Implement API call
+    # Return normalized job list
+```
+
+2. Add it to the aggregation in `aggregate_jobs_from_all_sources()`:
+```python
+tasks = [
+    fetch_jobs_from_jsearch(...),
+    fetch_jobs_from_findwork(...),
+    fetch_jobs_from_newapi(...),  # Add here
+]
+```
+
+3. Update `api_stats` dictionary to track the new source
 
 ## Next Steps
 

@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
-import { DashboardLayout } from '@/components/layout/DashboardLayout'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
@@ -21,8 +20,7 @@ export default async function SettingsPage() {
     .single()
 
   return (
-    <DashboardLayout user={user}>
-      <div className="container mx-auto px-6 py-8 max-w-4xl">
+    <div className="container mx-auto px-6 py-8 max-w-4xl">
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2">Settings</h1>
           <p className="text-muted-foreground">
@@ -126,6 +124,5 @@ export default async function SettingsPage() {
           </Card>
         </div>
       </div>
-    </DashboardLayout>
   )
 }

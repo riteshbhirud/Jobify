@@ -4,8 +4,6 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from datetime import datetime
 import logging
-import asyncio
-from app.routers.jobs import fetch_jobs_from_jsearch, jobs_cache, last_fetch_time
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -16,29 +14,29 @@ scheduler = AsyncIOScheduler()
 
 async def scrape_jobs_task():
     """
-    Background task to scrape jobs periodically
+    Background task to scrape jobs periodically from all sources
     This will run every hour to fetch fresh job listings
     """
-    global jobs_cache, last_fetch_time
-
-    logger.info("Starting scheduled job scraping...")
+    logger.info("Starting scheduled job scraping from all sources...")
 
     try:
-        # Fetch jobs with default parameters
-        # You can customize these parameters based on your needs
-        jobs = await fetch_jobs_from_jsearch(
+        # Import here to avoid circular dependency
+        from app.routers.jobs import aggregate_jobs_from_all_sources
+        import app.routers.jobs as jobs_module
+
+        # Fetch jobs from all sources with default parameters
+        jobs = await aggregate_jobs_from_all_sources(
             query="software engineer",
             location="United States",
-            num_pages=3,  # Fetch 30 jobs (10 per page)
+            num_pages=3,
             remote_jobs_only=False
         )
 
         # Update the global cache
-        import app.routers.jobs as jobs_module
         jobs_module.jobs_cache = jobs
         jobs_module.last_fetch_time = datetime.utcnow()
 
-        logger.info(f"Successfully scraped {len(jobs)} jobs at {datetime.utcnow()}")
+        logger.info(f"Successfully scraped {len(jobs)} jobs from all sources at {datetime.utcnow()}")
 
     except Exception as e:
         logger.error(f"Error during scheduled job scraping: {str(e)}")
