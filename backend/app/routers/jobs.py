@@ -7,6 +7,7 @@ import os
 from datetime import datetime, timezone
 import asyncio
 import logging
+import math
 from app.database import get_supabase
 from app.config import get_settings
 from openai import OpenAI
@@ -928,4 +929,572 @@ async def regenerate_embeddings(
 
     except Exception as e:
         logger.error(f"Error in regenerate_embeddings: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def cosine_similarity(vec1: List[float], vec2: List[float]) -> float:
+    """
+    Calculate cosine similarity between two vectors.
+    Returns a value between -1 and 1, where 1 means identical direction.
+    Handles both list and string formats (from database).
+    """
+    # Parse string embeddings if needed (from Supabase vector type)
+    import json
+
+    if isinstance(vec1, str):
+        try:
+            vec1 = json.loads(vec1)
+        except:
+            logger.error(f"Failed to parse vec1 as JSON: {vec1[:100]}")
+            return 0.0
+
+    if isinstance(vec2, str):
+        try:
+            vec2 = json.loads(vec2)
+        except:
+            logger.error(f"Failed to parse vec2 as JSON: {vec2[:100]}")
+            return 0.0
+
+    if not vec1 or not vec2 or len(vec1) != len(vec2):
+        return 0.0
+
+    # Calculate dot product
+    dot_product = sum(a * b for a, b in zip(vec1, vec2))
+
+    # Calculate magnitudes
+    magnitude1 = math.sqrt(sum(a * a for a in vec1))
+    magnitude2 = math.sqrt(sum(b * b for b in vec2))
+
+    # Avoid division by zero
+    if magnitude1 == 0 or magnitude2 == 0:
+        return 0.0
+
+    return dot_product / (magnitude1 * magnitude2)
+
+
+def calculate_match_score(
+    job: Dict[str, Any],
+    user: Dict[str, Any],
+    similarity_score: float
+) -> tuple[float, Dict[str, Any]]:
+    """
+    Calculate a comprehensive match score between a job and user.
+    Returns (final_score, match_reasons)
+
+    The score combines:
+    - Embedding similarity (70% weight)
+    - Hard filters and preference matching (30% weight)
+    """
+    reasons = {
+        "embedding_similarity": round(similarity_score, 3),
+        "filters_passed": [],
+        "filters_failed": [],
+        "preference_matches": []
+    }
+
+    # Start with embedding similarity as base (0-1 scale)
+    base_score = similarity_score
+
+    # Hard filters that disqualify a match
+    filters_passed = True
+
+    # Visa sponsorship check
+    if user.get("needs_visa_sponsorship") and job.get("visa_sponsorship") is False:
+        reasons["filters_failed"].append("Requires visa sponsorship but job doesn't offer it")
+        filters_passed = False
+    elif user.get("needs_visa_sponsorship") and job.get("visa_sponsorship") is True:
+        reasons["filters_passed"].append("Visa sponsorship available")
+
+    # Minimum salary check
+    user_min_salary = user.get("min_salary")
+    job_max_salary = job.get("salary_max")
+    if user_min_salary and job_max_salary:
+        if job_max_salary < user_min_salary:
+            reasons["filters_failed"].append(f"Salary max ${job_max_salary:,} below user minimum ${user_min_salary:,}")
+            filters_passed = False
+        else:
+            reasons["filters_passed"].append(f"Salary range meets minimum requirement")
+
+    # Excluded companies check
+    excluded_companies = user.get("excluded_companies", [])
+    if excluded_companies and job.get("company"):
+        job_company_lower = job.get("company").lower()
+        for excluded in excluded_companies:
+            if excluded.lower() in job_company_lower:
+                reasons["filters_failed"].append(f"Company '{job.get('company')}' is in excluded list")
+                filters_passed = False
+                break
+
+    # If hard filters failed, return 0 score
+    if not filters_passed:
+        return 0.0, reasons
+
+    # Preference matching (adds bonus points)
+    preference_score = 0.0
+    max_preference_score = 0.3  # Max 30% bonus
+
+    # Remote preference matching
+    user_remote_pref = user.get("remote_preference", "any")
+    job_remote_type = job.get("remote_type", "").lower() if job.get("remote_type") else ""
+
+    if user_remote_pref == "remote" and "remote" in job_remote_type:
+        preference_score += 0.1
+        reasons["preference_matches"].append("Remote work preference matched")
+    elif user_remote_pref == "hybrid" and "hybrid" in job_remote_type:
+        preference_score += 0.1
+        reasons["preference_matches"].append("Hybrid work preference matched")
+    elif user_remote_pref == "onsite" and ("onsite" in job_remote_type or "office" in job_remote_type):
+        preference_score += 0.1
+        reasons["preference_matches"].append("On-site work preference matched")
+
+    # Preferred companies check
+    preferred_companies = user.get("preferred_companies", [])
+    if preferred_companies and job.get("company"):
+        job_company_lower = job.get("company").lower()
+        for preferred in preferred_companies:
+            if preferred.lower() in job_company_lower:
+                preference_score += 0.1
+                reasons["preference_matches"].append(f"Preferred company '{job.get('company')}'")
+                break
+
+    # Location matching
+    user_locations = user.get("locations", [])
+    job_location = job.get("location", "")
+    if user_locations and job_location:
+        for user_loc in user_locations:
+            if user_loc.lower() in job_location.lower():
+                preference_score += 0.05
+                reasons["preference_matches"].append(f"Location preference matched: {user_loc}")
+                break
+
+    # Experience level matching
+    user_exp_level = user.get("experience_level", "").lower()
+    job_exp_level = job.get("experience_level", "").lower() if job.get("experience_level") else ""
+    if user_exp_level and job_exp_level and user_exp_level in job_exp_level:
+        preference_score += 0.05
+        reasons["preference_matches"].append(f"Experience level matched: {user_exp_level}")
+
+    # Cap preference score
+    preference_score = min(preference_score, max_preference_score)
+
+    # Calculate final score (embedding similarity weighted 70%, preferences 30%)
+    final_score = (base_score * 0.7) + preference_score
+
+    # Ensure score is between 0 and 1
+    final_score = max(0.0, min(1.0, final_score))
+
+    return final_score, reasons
+
+
+@router.post("/match")
+async def match_jobs_to_users(
+    user_id: Optional[str] = Query(None, description="Match jobs for a specific user. If not provided, matches for all active users."),
+    min_match_score: Optional[float] = Query(None, description="Minimum match score (0-1). If not provided, uses user's min_match_score setting."),
+    limit_per_user: int = Query(50, ge=1, le=500, description="Maximum number of matches per user"),
+    force_rematch: bool = Query(False, description="Force rematching even if already matched")
+):
+    """
+    Match jobs to users using embedding similarity and preference matching.
+    Creates entries in the applications table with status='matched'.
+
+    Matching algorithm:
+    1. Fetches users with embeddings (all active users or specific user)
+    2. Fetches jobs with embeddings
+    3. Calculates cosine similarity between user and job embeddings
+    4. Applies filters (visa sponsorship, salary, excluded companies)
+    5. Adds preference bonuses (remote preference, preferred companies, location)
+    6. Saves matches to applications table with match_score and match_reasons
+    """
+    try:
+        supabase = get_supabase()
+
+        # Fetch users with embeddings
+        users_query = supabase.table("users").select(
+            "id, email, first_name, last_name, embedding, min_match_score, "
+            "needs_visa_sponsorship, min_salary, excluded_companies, preferred_companies, "
+            "locations, remote_preference, experience_level, is_active"
+        ).not_.is_("embedding", "null")
+
+        # Filter by user_id if provided
+        if user_id:
+            users_query = users_query.eq("id", user_id)
+        else:
+            # Only match for active users
+            users_query = users_query.eq("is_active", True)
+
+        users_result = users_query.execute()
+
+        if not users_result.data:
+            return {
+                "success": False,
+                "message": "No users found with embeddings" + (f" for user_id {user_id}" if user_id else ""),
+                "matched_count": 0
+            }
+
+        users = users_result.data
+        logger.info(f"Found {len(users)} user(s) to match")
+
+        # Fetch jobs with embeddings
+        jobs_result = supabase.table("jobs").select(
+            "id, external_id, title, company, location, description, "
+            "employment_type, salary_min, salary_max, visa_sponsorship, "
+            "remote_type, experience_level, apply_url, posted_at, embedding"
+        ).not_.is_("embedding", "null").execute()
+
+        if not jobs_result.data:
+            return {
+                "success": False,
+                "message": "No jobs found with embeddings",
+                "matched_count": 0
+            }
+
+        jobs = jobs_result.data
+        logger.info(f"Found {len(jobs)} job(s) with embeddings")
+
+        # Track statistics
+        total_matches = 0
+        total_skipped = 0
+        user_match_details = []
+
+        # Process each user
+        for user in users:
+            user_id_current = user["id"]
+            user_min_score = min_match_score if min_match_score is not None else user.get("min_match_score", 0.70)
+            user_embedding = user.get("embedding")
+
+            if not user_embedding:
+                logger.warning(f"User {user_id_current} has no embedding, skipping")
+                continue
+
+            logger.info(f"Matching jobs for user {user.get('email')} (min_score: {user_min_score})")
+
+            # Get existing applications for this user to avoid duplicates
+            existing_apps = set()
+            if not force_rematch:
+                existing_result = supabase.table("applications").select("job_id").eq("user_id", user_id_current).execute()
+                existing_apps = {app["job_id"] for app in existing_result.data} if existing_result.data else set()
+                logger.info(f"User has {len(existing_apps)} existing applications")
+
+            # Calculate match scores for all jobs
+            job_matches = []
+            for job in jobs:
+                job_id = job["id"]
+                job_embedding = job.get("embedding")
+
+                # Skip if already applied (unless force_rematch)
+                if not force_rematch and job_id in existing_apps:
+                    total_skipped += 1
+                    continue
+
+                if not job_embedding:
+                    continue
+
+                # Calculate cosine similarity
+                similarity = cosine_similarity(user_embedding, job_embedding)
+
+                # Calculate comprehensive match score with filters and preferences
+                match_score, match_reasons = calculate_match_score(job, user, similarity)
+
+                # Only include matches above threshold
+                if match_score >= user_min_score:
+                    job_matches.append({
+                        "job_id": job_id,
+                        "job_title": job.get("title"),
+                        "company": job.get("company"),
+                        "match_score": match_score,
+                        "match_reasons": match_reasons
+                    })
+
+            # Sort by match score and limit
+            job_matches.sort(key=lambda x: x["match_score"], reverse=True)
+            job_matches = job_matches[:limit_per_user]
+
+            logger.info(f"Found {len(job_matches)} matches for user {user.get('email')}")
+
+            # Insert into applications table
+            inserted = 0
+            for match in job_matches:
+                try:
+                    application = {
+                        "user_id": user_id_current,
+                        "job_id": match["job_id"],
+                        "match_score": match["match_score"],
+                        "match_reasons": match["match_reasons"],
+                        "status": "matched",
+                        "matched_at": datetime.now(timezone.utc).isoformat()
+                    }
+
+                    supabase.table("applications").insert(application).execute()
+                    inserted += 1
+
+                except Exception as e:
+                    error_msg = str(e)
+                    # Skip if duplicate
+                    if any(indicator in error_msg.lower() for indicator in ["duplicate", "unique constraint", "already exists"]):
+                        total_skipped += 1
+                        logger.debug(f"Skipped duplicate application for user {user_id_current}, job {match['job_id']}")
+                    else:
+                        logger.error(f"Error inserting application: {error_msg}")
+
+            total_matches += inserted
+            user_match_details.append({
+                "user_id": user_id_current,
+                "email": user.get("email"),
+                "matches_found": len(job_matches),
+                "matches_inserted": inserted
+            })
+
+        return {
+            "success": True,
+            "message": f"Matched {total_matches} jobs across {len(users)} user(s)",
+            "total_matches_created": total_matches,
+            "total_skipped": total_skipped,
+            "users_processed": len(users),
+            "user_details": user_match_details
+        }
+
+    except Exception as e:
+        logger.error(f"Error in match_jobs_to_users: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/match/debug")
+async def debug_match_status():
+    """
+    Debug endpoint to check the status of users and jobs for matching.
+    Shows how many users/jobs have embeddings and their active status.
+    """
+    try:
+        supabase = get_supabase()
+
+        # Count total users
+        all_users = supabase.table("users").select("id, email, embedding, is_active, onboarding_completed").execute()
+        total_users = len(all_users.data) if all_users.data else 0
+
+        # Count users with embeddings
+        users_with_embeddings = [u for u in all_users.data if u.get("embedding")] if all_users.data else []
+
+        # Count active users with embeddings
+        active_users_with_embeddings = [
+            u for u in users_with_embeddings
+            if u.get("is_active")
+        ]
+
+        # Count jobs
+        all_jobs = supabase.table("jobs").select("id, embedding").execute()
+        total_jobs = len(all_jobs.data) if all_jobs.data else 0
+
+        # Count jobs with embeddings
+        jobs_with_embeddings = [j for j in all_jobs.data if j.get("embedding")] if all_jobs.data else []
+
+        # User details for debugging
+        user_details = []
+        for user in users_with_embeddings[:10]:  # Show first 10
+            user_details.append({
+                "id": user.get("id"),
+                "email": user.get("email"),
+                "has_embedding": user.get("embedding") is not None,
+                "is_active": user.get("is_active"),
+                "onboarding_completed": user.get("onboarding_completed")
+            })
+
+        return {
+            "success": True,
+            "users": {
+                "total": total_users,
+                "with_embeddings": len(users_with_embeddings),
+                "active_with_embeddings": len(active_users_with_embeddings),
+                "sample_users": user_details
+            },
+            "jobs": {
+                "total": total_jobs,
+                "with_embeddings": len(jobs_with_embeddings)
+            },
+            "ready_to_match": len(active_users_with_embeddings) > 0 and len(jobs_with_embeddings) > 0,
+            "issues": []
+        }
+
+    except Exception as e:
+        logger.error(f"Error in debug_match_status: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/match/scores/{user_id}")
+async def get_match_scores(
+    user_id: str,
+    limit: int = Query(20, ge=1, le=100, description="Number of top matches to return")
+):
+    """
+    Debug endpoint to see actual match scores for a user without saving to database.
+    Shows top N matches sorted by score.
+    """
+    try:
+        supabase = get_supabase()
+
+        # Fetch user with all relevant fields
+        user_result = supabase.table("users").select(
+            "id, email, first_name, last_name, embedding, min_match_score, "
+            "needs_visa_sponsorship, min_salary, excluded_companies, preferred_companies, "
+            "locations, remote_preference, experience_level"
+        ).eq("id", user_id).execute()
+
+        if not user_result.data:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        user = user_result.data[0]
+
+        if not user.get("embedding"):
+            raise HTTPException(status_code=400, detail="User has no embedding")
+
+        user_min_score = user.get("min_match_score", 0.70)
+        user_embedding = user.get("embedding")
+
+        # Fetch jobs with embeddings
+        jobs_result = supabase.table("jobs").select(
+            "id, external_id, title, company, location, description, "
+            "employment_type, salary_min, salary_max, visa_sponsorship, "
+            "remote_type, experience_level, apply_url, posted_at, embedding"
+        ).not_.is_("embedding", "null").limit(200).execute()
+
+        if not jobs_result.data:
+            raise HTTPException(status_code=404, detail="No jobs found with embeddings")
+
+        jobs = jobs_result.data
+
+        # Calculate scores for all jobs
+        all_scores = []
+        for job in jobs:
+            job_embedding = job.get("embedding")
+            if not job_embedding:
+                continue
+
+            # Calculate cosine similarity
+            similarity = cosine_similarity(user_embedding, job_embedding)
+
+            # Calculate comprehensive match score
+            match_score, match_reasons = calculate_match_score(job, user, similarity)
+
+            all_scores.append({
+                "job_id": job["id"],
+                "title": job.get("title"),
+                "company": job.get("company"),
+                "location": job.get("location"),
+                "salary_range": f"${job.get('salary_min'):,} - ${job.get('salary_max'):,}" if job.get("salary_min") and job.get("salary_max") else None,
+                "match_score": round(match_score, 4),
+                "match_reasons": match_reasons,
+                "meets_threshold": match_score >= user_min_score
+            })
+
+        # Sort by match score
+        all_scores.sort(key=lambda x: x["match_score"], reverse=True)
+
+        # Get top matches
+        top_matches = all_scores[:limit]
+
+        # Count matches above threshold
+        above_threshold = [s for s in all_scores if s["meets_threshold"]]
+
+        return {
+            "success": True,
+            "user": {
+                "id": user["id"],
+                "email": user.get("email"),
+                "min_match_score": user_min_score
+            },
+            "stats": {
+                "total_jobs_evaluated": len(all_scores),
+                "matches_above_threshold": len(above_threshold),
+                "highest_score": all_scores[0]["match_score"] if all_scores else 0,
+                "lowest_score": all_scores[-1]["match_score"] if all_scores else 0
+            },
+            "top_matches": top_matches
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in get_match_scores: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/match/diagnose/{user_id}")
+async def diagnose_embeddings(user_id: str):
+    """
+    Diagnose embedding issues for a specific user.
+    Checks embedding dimensions and formats for user and sample jobs.
+    """
+    try:
+        supabase = get_supabase()
+
+        # Fetch user embedding
+        user_result = supabase.table("users").select("id, email, embedding").eq("id", user_id).execute()
+
+        if not user_result.data:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        user = user_result.data[0]
+        user_embedding = user.get("embedding")
+
+        if not user_embedding:
+            raise HTTPException(status_code=400, detail="User has no embedding")
+
+        # Fetch a few sample jobs
+        jobs_result = supabase.table("jobs").select("id, title, company, embedding").not_.is_("embedding", "null").limit(3).execute()
+
+        if not jobs_result.data:
+            raise HTTPException(status_code=404, detail="No jobs found with embeddings")
+
+        # Analyze embeddings
+        user_embedding_info = {
+            "type": type(user_embedding).__name__,
+            "is_list": isinstance(user_embedding, list),
+            "length": len(user_embedding) if isinstance(user_embedding, (list, str)) else None,
+            "first_5_values": user_embedding[:5] if isinstance(user_embedding, list) else str(user_embedding)[:100],
+            "sample_value_type": type(user_embedding[0]).__name__ if isinstance(user_embedding, list) and len(user_embedding) > 0 else None
+        }
+
+        job_embeddings_info = []
+        for job in jobs_result.data[:3]:
+            job_emb = job.get("embedding")
+            job_embeddings_info.append({
+                "job_id": job["id"],
+                "title": job.get("title"),
+                "company": job.get("company"),
+                "embedding_type": type(job_emb).__name__,
+                "is_list": isinstance(job_emb, list),
+                "length": len(job_emb) if isinstance(job_emb, (list, str)) else None,
+                "first_5_values": job_emb[:5] if isinstance(job_emb, list) else str(job_emb)[:100],
+                "sample_value_type": type(job_emb[0]).__name__ if isinstance(job_emb, list) and len(job_emb) > 0 else None
+            })
+
+        # Try to calculate similarity with first job
+        similarity_test = None
+        similarity_error = None
+        if jobs_result.data:
+            try:
+                job_emb = jobs_result.data[0].get("embedding")
+                similarity_test = cosine_similarity(user_embedding, job_emb)
+            except Exception as e:
+                similarity_error = str(e)
+
+        return {
+            "success": True,
+            "user_id": user_id,
+            "user_email": user.get("email"),
+            "user_embedding": user_embedding_info,
+            "sample_job_embeddings": job_embeddings_info,
+            "similarity_test": {
+                "result": similarity_test,
+                "error": similarity_error
+            },
+            "diagnosis": {
+                "dimensions_match": user_embedding_info["length"] == job_embeddings_info[0]["length"] if job_embeddings_info else None,
+                "types_match": user_embedding_info["type"] == job_embeddings_info[0]["embedding_type"] if job_embeddings_info else None
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in diagnose_embeddings: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
