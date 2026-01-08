@@ -113,12 +113,11 @@ export default function OnboardingPage() {
 
     setSaving(true)
     try {
+      // First save the automation settings data to Supabase
       const { error } = await supabase
         .from('users')
         .update({
           ...data,
-          onboarding_step: TOTAL_STEPS + 1,
-          onboarding_completed: true,
           is_active: false, // User will manually activate from dashboard
           updated_at: new Date().toISOString(),
         })
@@ -126,11 +125,36 @@ export default function OnboardingPage() {
 
       if (error) throw error
 
-      setUserData({ ...userData, ...data })
+      // Get the current session for auth token
+      const { data: sessionData } = await supabase.auth.getSession()
+
+      if (!sessionData?.session?.access_token) {
+        throw new Error('No authentication session')
+      }
+
+      // Call backend to complete onboarding and generate embedding
+      const response = await fetch('http://localhost:8000/api/users/me/complete-onboarding', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${sessionData.session.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.detail || 'Failed to complete onboarding')
+      }
+
+      console.log('Onboarding completed:', result)
+      console.log('Embedding generated:', result.embedding_generated)
+
+      setUserData({ ...userData, ...data, onboarding_completed: true })
       setCurrentStep(TOTAL_STEPS + 1) // Show completion screen
     } catch (error: any) {
       console.error('Error completing onboarding:', error)
-      alert('Failed to complete onboarding. Please try again.')
+      alert(error.message || 'Failed to complete onboarding. Please try again.')
     } finally {
       setSaving(false)
     }
