@@ -10,8 +10,10 @@ import sys
 import os
 import asyncio
 import logging
+import tempfile
+import urllib.parse
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 from datetime import datetime, timezone
 from dataclasses import asdict
 
@@ -49,6 +51,118 @@ def detect_ats_platform(url: str) -> Optional[str]:
         if domain in url_lower:
             return platform
     return None
+
+
+def extract_storage_path_from_url(resume_url: str) -> Optional[Tuple[str, str]]:
+    """
+    Extract bucket name and file path from a Supabase Storage URL.
+
+    Expected URL format:
+    https://{project_id}.supabase.co/storage/v1/object/public/{bucket}/{path}
+
+    Returns:
+        Tuple of (bucket_name, file_path) or None if URL is invalid
+    """
+    if not resume_url:
+        return None
+
+    try:
+        parsed = urllib.parse.urlparse(resume_url)
+        path_parts = parsed.path.split('/')
+
+        # Expected path: /storage/v1/object/public/{bucket}/{user_id}/{filename}
+        if len(path_parts) >= 6 and 'storage' in path_parts and 'object' in path_parts:
+            # Find index of 'public' or 'sign' (for signed URLs)
+            for i, part in enumerate(path_parts):
+                if part in ('public', 'sign'):
+                    bucket_name = path_parts[i + 1]
+                    file_path = '/'.join(path_parts[i + 2:])
+                    return (bucket_name, file_path)
+
+        return None
+    except Exception as e:
+        logger.error(f"Error parsing resume URL {resume_url}: {e}")
+        return None
+
+
+def download_resume_from_storage(resume_url: str, user_id: str) -> Tuple[Optional[str], bool]:
+    """
+    Download resume from Supabase Storage to a temporary file.
+
+    Args:
+        resume_url: The Supabase Storage public URL for the resume
+        user_id: The user's ID (for logging)
+
+    Returns:
+        Tuple of (temp_file_path, success_flag)
+        - On success: (path_to_temp_file, True)
+        - On failure: (None, False)
+    """
+    if not resume_url:
+        logger.warning(f"No resume URL provided for user {user_id}")
+        return (None, False)
+
+    temp_path = None
+    try:
+        # Parse the URL to extract bucket and path
+        storage_info = extract_storage_path_from_url(resume_url)
+
+        if not storage_info:
+            logger.error(f"Could not parse resume URL: {resume_url}")
+            return (None, False)
+
+        bucket_name, file_path = storage_info
+
+        # Get the file extension from the path
+        file_ext = Path(file_path).suffix or '.pdf'
+
+        # Create temp file with appropriate extension
+        temp_file = tempfile.NamedTemporaryFile(
+            suffix=file_ext,
+            prefix=f"resume_{user_id[:8]}_",
+            delete=False  # We'll handle deletion manually
+        )
+        temp_path = temp_file.name
+        temp_file.close()
+
+        # Download from Supabase Storage
+        supabase = get_supabase()
+
+        logger.info(f"Downloading resume from bucket '{bucket_name}', path '{file_path}'")
+
+        response = supabase.storage.from_(bucket_name).download(file_path)
+
+        # Write to temp file
+        with open(temp_path, 'wb') as f:
+            f.write(response)
+
+        logger.info(f"Successfully downloaded resume for user {user_id} to {temp_path}")
+        return (temp_path, True)
+
+    except Exception as e:
+        logger.error(f"Failed to download resume for user {user_id}: {e}")
+        # Clean up temp file if it was created
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.unlink(temp_path)
+            except:
+                pass
+        return (None, False)
+
+
+def cleanup_temp_file(file_path: str) -> None:
+    """
+    Clean up a temporary file.
+
+    Args:
+        file_path: Path to the temporary file to delete
+    """
+    if file_path and os.path.exists(file_path):
+        try:
+            os.unlink(file_path)
+            logger.debug(f"Cleaned up temp file: {file_path}")
+        except Exception as e:
+            logger.warning(f"Failed to clean up temp file {file_path}: {e}")
 
 
 def get_pipeline_class(platform: str):
@@ -259,15 +373,33 @@ async def run_application_pipeline(
         user_profile = build_user_profile(user)
         job_info = build_job_info(job)
 
-        # Get resume path
+        # Download resume from Supabase Storage
         resume_url = user.get("resume_url")
         resume_path = None
-        if resume_url:
-            # For now, use local path. In production, download from storage.
-            resume_path = str(AUTOMATION_SCRIPT_DIR / "data" / "resumes" / "resume.pdf")
+        temp_resume_path = None  # Track for cleanup
 
-        # Get cover letter path (optional)
-        cover_letter_path = str(AUTOMATION_SCRIPT_DIR / "data" / "cover_letters" / "coverletter.pdf")
+        if resume_url:
+            temp_resume_path, download_success = download_resume_from_storage(
+                resume_url=resume_url,
+                user_id=user_id
+            )
+            if download_success:
+                resume_path = temp_resume_path
+            else:
+                logger.warning(f"Could not download resume for user {user_id}, proceeding without resume")
+        else:
+            logger.warning(f"No resume_url found for user {user_id}")
+
+        # Validate resume exists (required for application)
+        if not resume_path:
+            raise ValueError(f"Resume is required but could not be obtained for user {user_id}")
+
+        # Verify file exists and has content
+        if not os.path.exists(resume_path) or os.path.getsize(resume_path) == 0:
+            raise ValueError(f"Downloaded resume file is invalid or empty: {resume_path}")
+
+        # Cover letter is optional - skip for now (no cover_letter_url in user schema)
+        cover_letter_path = None
 
         # Run the pipeline with BrowserBase or local browser
         async with async_playwright() as p:
@@ -326,6 +458,10 @@ async def run_application_pipeline(
                 if browser:
                     await browser.close()
 
+                # Clean up temporary resume file
+                if temp_resume_path:
+                    cleanup_temp_file(temp_resume_path)
+
         # Update application with result
         update_data = {
             "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -369,6 +505,10 @@ async def run_application_pipeline(
 
     except Exception as e:
         logger.error(f"Pipeline error for application {application_id}: {e}")
+
+        # Clean up temporary resume file if it was created
+        if 'temp_resume_path' in locals() and temp_resume_path:
+            cleanup_temp_file(temp_resume_path)
 
         # Update application status to failed
         supabase.table("applications").update({
