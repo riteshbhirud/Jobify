@@ -1,0 +1,14 @@
+Dear Hiring Manager,
+
+I am writing to express my strong interest in the Software Engineering Intern position. As a Computer Science student at Stanford University with hands-on experience from internships at Google and Meta, I am excited about the opportunity to contribute to your team.
+
+During my internship at Google, I developed microservices that handled over 1 million requests daily and improved API response times by 40%. At Meta, I built React components for the News Feed that are used by millions of users. These experiences have given me a solid foundation in full-stack development, distributed systems, and working in fast-paced engineering environments.
+
+I am particularly drawn to this opportunity because of the chance to work on impactful projects while learning from experienced engineers. My technical skills in Python, JavaScript, C#/.NET, and cloud technologies align well with the role requirements, and I am eager to apply my problem-solving abilities to real-world challenges.
+
+I would welcome the opportunity to discuss how my background and enthusiasm can contribute to your team's success.
+
+Thank you for considering my application.
+
+Best regards,
+John Doe

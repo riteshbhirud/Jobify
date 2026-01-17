@@ -1,0 +1,136 @@
+{
+  "first_name": "Poonam",
+  "last_name": "Bhirud",
+  "email": "kamaldass73821@gmail.com",
+  "phone": "7813255763",
+  "phone_country_code": "us",
+  "linkedin_url": "https://www.linkedin.com/in/pbhirud",
+  "github_url": "https://github.com/pbhirud",
+  "portfolio_url": "https://johndoe.dev",
+
+  "address": {
+    "line1": "123 Main Street",
+    "line2": "Apt 4B",
+    "city": "San Francisco",
+    "state": "CA",
+    "zip": "94102",
+    "country": "United States"
+  },
+
+  "start_date": "ASAP",
+  "security_clearance": "TS/SCI w/ FS Poly",
+  "is_us_citizen": true,
+
+  "portal_password": "SecurePass123!",
+
+  "education": [
+    {
+      "school": "Stanford University",
+      "degree": "Master's Degree",
+      "discipline": "Computer Science",
+      "gpa": "3.9",
+      "start_year": "2024",
+      "end_year": "2026",
+      "current": true
+    },
+    {
+      "school": "University of California, Berkeley",
+      "degree": "Bachelor's Degree",
+      "discipline": "Computer Science",
+      "gpa": "3.8",
+      "start_year": "2020",
+      "end_year": "2024",
+      "current": false
+    }
+  ],
+
+  "experience": [
+    {
+      "company": "Google",
+      "title": "Software Engineer Intern",
+      "location": "Mountain View, CA",
+      "start_date": "2023-06",
+      "end_date": "2023-09",
+      "current": false,
+      "bullets": [
+        "Built microservices handling 1M+ requests/day using Go and Kubernetes",
+        "Improved API response time by 40% through caching optimizations",
+        "Collaborated with cross-functional team of 5 engineers"
+      ]
+    },
+    {
+      "company": "Meta",
+      "title": "Software Engineer Intern",
+      "location": "Menlo Park, CA",
+      "start_date": "2022-06",
+      "end_date": "2022-09",
+      "current": false,
+      "bullets": [
+        "Developed React components for News Feed used by millions",
+        "Improved page load time by 15% through code splitting"
+      ]
+    }
+  ],
+
+  "skills": [
+    "Python", "JavaScript", "TypeScript", "C#", ".NET", "React", "Node.js",
+    "PostgreSQL", "MongoDB", "AWS", "Docker", "Kubernetes",
+    "Git", "CI/CD", "REST APIs", "GraphQL", "Visual Studio", "VS Code"
+  ],
+
+  "projects": [
+    {
+      "name": "TaskFlow",
+      "description": "A task management app with AI prioritization",
+      "url": "https://github.com/johndoe/taskflow",
+      "technologies": ["React", "Node.js", "OpenAI API"]
+    },
+    {
+      "name": "HealthTracker",
+      "description": "Mobile app for tracking health metrics",
+      "url": "https://github.com/johndoe/healthtracker",
+      "technologies": ["React Native", "Firebase", "Python"]
+    }
+  ],
+
+  "common_answers": {
+    "Are you legally authorized to work in the United States?": "Yes",
+    "Will you now or in the future require sponsorship for employment visa status?": "No",
+    "Do you now, or will you in the future, require sponsorship for employment visa status (e.g. H-1B visa status)?": "No",
+    "Will you now or in the future require visa sponsorship (such as H1b)?": "No",
+    "Are you at least 18 years of age?": "Yes",
+    "What are your salary expectations?": "$25/hr",
+    "When can you start?": "Immediately upon completion of current semester",
+    "Are you willing to relocate?": "Yes",
+    "How did you hear about this job?": "LinkedIn",
+    "Are you currently authorized to work in the US?": "Yes",
+    "Will you require visa sponsorship now or in the future?": "No",
+    "What is your desired salary?": "$25/hr",
+    "What is your expected graduation date?": "June 2026",
+    "Are you willing to work on-site?": "Yes",
+    "Can you commute to our office?": "Yes",
+    "Are you currently subject to a non-compete from your current or previous employer?": "No",
+    "Are you related (e.g., family, close friend) to any current employee(s) of MCG, Health?": "No",
+    "Do you currently reside in any of the following states? Alaska, Hawaii, Mississippi, North Dakota, New Mexico, Vermont": "No"
+  },
+
+  "resume_file": "resume.pdf",
+  "cover_letter_file": "coverletter.pdf",
+
+  "preferences": {
+    "target_role": "Software Engineering Intern",
+    "experience_level": "Entry-level/Intern",
+    "remote_preference": "hybrid",
+    "willing_to_relocate": true
+  },
+
+  "demographics": {
+    "gender": "Man",
+    "race": "Asian",
+    "hispanic_or_latino": "No",
+    "sexual_orientation": "Decline to self-identify",
+    "transgender": "No",
+    "veteran_status": "No",
+    "disability_status": "Decline to self-identify"
+  }
+}
