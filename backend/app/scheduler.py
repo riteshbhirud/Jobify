@@ -12,6 +12,30 @@ logger = logging.getLogger(__name__)
 scheduler = AsyncIOScheduler()
 
 
+async def run_matching_pipeline_task():
+    """
+    Background task to run the matching pipeline periodically.
+    Matches all active users to their top jobs and queues for automation.
+    """
+    logger.info("Starting scheduled matching pipeline...")
+
+    try:
+        from app.services.matching_pipeline import run_full_pipeline
+
+        result = await run_full_pipeline(
+            top_matches_per_user=3,
+            min_match_score=0.3,
+            max_applications=20,
+            dry_run=False,
+            use_browserbase=True
+        )
+
+        logger.info(f"Matching pipeline completed: {result.get('matching', {}).get('applications_created', 0)} applications created")
+
+    except Exception as e:
+        logger.error(f"Error during scheduled matching pipeline: {str(e)}")
+
+
 async def scrape_jobs_task(use_activejobsdb: bool = False):
     """
     Background task to scrape jobs periodically from all sources
@@ -78,10 +102,21 @@ def start_scheduler():
         kwargs={"use_activejobsdb": True}
     )
 
+    # Optional: Schedule the matching pipeline to run periodically
+    # Uncomment to enable automatic matching every 6 hours
+    # scheduler.add_job(
+    #     run_matching_pipeline_task,
+    #     trigger=IntervalTrigger(hours=6),
+    #     id="matching_pipeline",
+    #     name="Run matching pipeline every 6 hours",
+    #     replace_existing=True
+    # )
+
     scheduler.start()
     logger.info("Job scraping scheduler started successfully")
     logger.info("- JSearch only: Every hour")
     logger.info("- ActiveJobsDB: Once per day")
+    logger.info("- Matching pipeline: Manual trigger via /api/pipeline/run (or uncomment scheduler for automatic runs)")
 
 
 def stop_scheduler():

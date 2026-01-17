@@ -1,0 +1,694 @@
+# backend/app/services/automation_service.py
+
+"""
+Service for running job application automation pipelines.
+Integrates with BrowserBase for cloud browser automation and the automation_script
+package to apply to jobs via different ATS platforms.
+"""
+
+import sys
+import os
+import asyncio
+import logging
+from pathlib import Path
+from typing import Optional, Dict, Any
+from datetime import datetime, timezone
+from dataclasses import asdict
+
+# Add automation_script to path
+AUTOMATION_SCRIPT_DIR = Path(__file__).parent.parent.parent.parent / "automation_script"
+sys.path.insert(0, str(AUTOMATION_SCRIPT_DIR))
+
+from playwright.async_api import async_playwright
+
+from app.database import get_supabase
+from app.config import get_settings
+
+logger = logging.getLogger(__name__)
+settings = get_settings()
+
+
+# ATS domain to pipeline mapping
+ATS_DOMAINS = {
+    "greenhouse.io": "greenhouse",
+    "lever.co": "lever",
+    "workable.com": "workable",
+    "myworkdayjobs.com": "workday",
+}
+
+
+def detect_ats_platform(url: str) -> Optional[str]:
+    """
+    Detect the ATS platform from a job URL.
+    Returns the platform name or None if not supported.
+    """
+    if not url:
+        return None
+    url_lower = url.lower()
+    for domain, platform in ATS_DOMAINS.items():
+        if domain in url_lower:
+            return platform
+    return None
+
+
+def get_pipeline_class(platform: str):
+    """
+    Get the pipeline class for a given platform.
+    Import is done lazily to avoid import errors if automation_script is not set up.
+    """
+    try:
+        if platform == "greenhouse":
+            from pipelines.greenhouse import GreenhousePipeline
+            return GreenhousePipeline
+        elif platform == "lever":
+            from pipelines.lever import LeverPipeline
+            return LeverPipeline
+        elif platform == "workable":
+            from pipelines.workable import WorkablePipeline
+            return WorkablePipeline
+        elif platform == "workday":
+            from pipelines.workday import WorkdayPipeline
+            return WorkdayPipeline
+        else:
+            return None
+    except ImportError as e:
+        logger.error(f"Failed to import pipeline for {platform}: {e}")
+        return None
+
+
+def build_user_profile(user: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Build a user profile dict compatible with the automation pipelines.
+    Maps database user fields to the profile format expected by pipelines.
+    """
+    profile = {
+        # Basic info
+        "first_name": user.get("first_name", ""),
+        "last_name": user.get("last_name", ""),
+        "email": user.get("email", ""),
+        "phone": user.get("phone", ""),
+        "phone_country_code": user.get("phone_country_code", "us"),
+
+        # Address
+        "address": {
+            "street": user.get("address_line1", ""),
+            "street2": user.get("address_line2", ""),
+            "city": user.get("city", ""),
+            "state": user.get("state", ""),
+            "zip": user.get("zip_code", ""),
+            "country": user.get("country", "United States"),
+        },
+
+        # Links
+        "linkedin_url": user.get("linkedin_url", ""),
+        "github_url": user.get("github_url", ""),
+        "portfolio_url": user.get("portfolio_url", ""),
+
+        # Professional info
+        "target_role": user.get("target_role", ""),
+        "experience_level": user.get("experience_level", ""),
+        "skills": user.get("skills", []),
+
+        # Education & Experience (JSONB fields)
+        "education": user.get("education", []),
+        "experience": user.get("experience", []),
+        "projects": user.get("projects", []),
+        "certifications": user.get("certifications", []),
+
+        # Work preferences
+        "remote_preference": user.get("remote_preference", "any"),
+        "locations": user.get("locations", []),
+        "willing_to_relocate": user.get("willing_to_relocate", True),
+        "start_date": user.get("start_date", ""),
+        "min_salary": user.get("min_salary"),
+
+        # Authorization
+        "is_us_citizen": user.get("is_us_citizen", False),
+        "needs_visa_sponsorship": user.get("needs_visa_sponsorship", False),
+        "security_clearance": user.get("security_clearance", "No Clearance"),
+        "military_experience": user.get("military_experience", False),
+
+        # Demographics (for EEOC questions)
+        "demographics": user.get("demographics", {}),
+
+        # Pre-populated answers for common questions
+        "common_answers": user.get("common_answers", {}),
+
+        # Portal password (for sites that require account creation)
+        "portal_password": user.get("portal_password", ""),
+    }
+
+    return profile
+
+
+def build_job_info(job: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Build a job info dict compatible with the automation pipelines.
+    """
+    return {
+        "id": job.get("id"),
+        "title": job.get("title", ""),
+        "company": job.get("company", ""),
+        "location": job.get("location", ""),
+        "description": job.get("description", ""),
+        "apply_url": job.get("apply_url", ""),
+        "source": job.get("source", ""),
+        "employment_type": job.get("employment_type", ""),
+        "experience_level": job.get("experience_level", ""),
+        "remote_type": job.get("remote_type", ""),
+        "salary_min": job.get("salary_min"),
+        "salary_max": job.get("salary_max"),
+    }
+
+
+async def create_browserbase_session() -> Optional[Dict[str, Any]]:
+    """
+    Create a BrowserBase session for cloud browser automation.
+    Returns session info including connect_url, or None if BrowserBase is not configured.
+    """
+    browserbase_api_key = getattr(settings, 'browserbase_api_key', None) or os.getenv("BROWSERBASE_API_KEY")
+    browserbase_project_id = getattr(settings, 'browserbase_project_id', None) or os.getenv("BROWSERBASE_PROJECT_ID")
+
+    if not browserbase_api_key or not browserbase_project_id:
+        logger.warning("BrowserBase credentials not configured")
+        return None
+
+    try:
+        from browserbase import Browserbase
+
+        bb = Browserbase(api_key=browserbase_api_key)
+        session = bb.sessions.create(project_id=browserbase_project_id)
+
+        logger.info(f"Created BrowserBase session: {session.id}")
+
+        return {
+            "id": session.id,
+            "connect_url": session.connect_url,
+        }
+    except Exception as e:
+        logger.error(f"Failed to create BrowserBase session: {e}")
+        return None
+
+
+async def run_application_pipeline(
+    user_id: str,
+    job_id: str,
+    application_id: str,
+    dry_run: bool = False,
+    use_browserbase: bool = True,
+    headless: bool = True
+) -> Dict[str, Any]:
+    """
+    Run the automation pipeline to apply for a job.
+
+    Args:
+        user_id: The user's ID
+        job_id: The job's ID
+        application_id: The application record ID
+        dry_run: If True, fill form but don't submit
+        use_browserbase: If True, use BrowserBase cloud browsers (recommended)
+        headless: If True and not using BrowserBase, run local browser in headless mode
+
+    Returns:
+        Dict with result information
+    """
+    supabase = get_supabase()
+    browserbase_session = None
+
+    try:
+        # Update application status to 'started'
+        current_app = supabase.table("applications").select("attempt_count").eq("id", application_id).single().execute()
+        current_attempt = current_app.data.get("attempt_count", 0) if current_app.data else 0
+
+        supabase.table("applications").update({
+            "status": "started",
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "attempt_count": current_attempt + 1
+        }).eq("id", application_id).execute()
+
+        # Fetch user data
+        user_result = supabase.table("users").select("*").eq("id", user_id).single().execute()
+        if not user_result.data:
+            raise ValueError(f"User {user_id} not found")
+        user = user_result.data
+
+        # Fetch job data
+        job_result = supabase.table("jobs").select("*").eq("id", job_id).single().execute()
+        if not job_result.data:
+            raise ValueError(f"Job {job_id} not found")
+        job = job_result.data
+
+        # Get apply URL
+        apply_url = job.get("apply_url")
+        if not apply_url:
+            raise ValueError("Job has no apply URL")
+
+        # Detect ATS platform
+        platform = detect_ats_platform(apply_url)
+        if not platform:
+            raise ValueError(f"Unsupported ATS platform for URL: {apply_url}")
+
+        logger.info(f"Detected ATS platform: {platform} for URL: {apply_url}")
+
+        # Get pipeline class
+        pipeline_class = get_pipeline_class(platform)
+        if not pipeline_class:
+            raise ValueError(f"Pipeline not available for platform: {platform}")
+
+        # Build profile and job info
+        user_profile = build_user_profile(user)
+        job_info = build_job_info(job)
+
+        # Get resume path
+        resume_url = user.get("resume_url")
+        resume_path = None
+        if resume_url:
+            # For now, use local path. In production, download from storage.
+            resume_path = str(AUTOMATION_SCRIPT_DIR / "data" / "resumes" / "resume.pdf")
+
+        # Get cover letter path (optional)
+        cover_letter_path = str(AUTOMATION_SCRIPT_DIR / "data" / "cover_letters" / "coverletter.pdf")
+
+        # Run the pipeline with BrowserBase or local browser
+        async with async_playwright() as p:
+            browser = None
+            context = None
+            page = None
+
+            try:
+                if use_browserbase:
+                    # Try to create BrowserBase session
+                    browserbase_session = await create_browserbase_session()
+
+                    if browserbase_session:
+                        logger.info(f"Connecting to BrowserBase session: {browserbase_session['id']}")
+
+                        # Connect to BrowserBase via CDP
+                        browser = await p.chromium.connect_over_cdp(browserbase_session["connect_url"])
+
+                        # Get the default context and page from BrowserBase
+                        context = browser.contexts[0]
+                        page = context.pages[0] if context.pages else await context.new_page()
+
+                        logger.info("Successfully connected to BrowserBase")
+                    else:
+                        logger.warning("BrowserBase not available, falling back to local browser")
+                        use_browserbase = False
+
+                if not use_browserbase or not browser:
+                    # Fall back to local browser
+                    logger.info("Using local Chromium browser")
+                    browser = await p.chromium.launch(
+                        headless=headless,
+                        slow_mo=100  # Human-like delays
+                    )
+                    context = await browser.new_context(
+                        viewport={"width": 1920, "height": 1080},
+                        user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                    )
+                    page = await context.new_page()
+
+                # Create pipeline instance
+                pipeline = pipeline_class(
+                    page=page,
+                    user_profile=user_profile,
+                    job_info=job_info,
+                    resume_path=resume_path,
+                    cover_letter_path=cover_letter_path,
+                    dry_run=dry_run
+                )
+
+                # Run the pipeline
+                result = await pipeline.run(apply_url)
+
+            finally:
+                # Close browser
+                if browser:
+                    await browser.close()
+
+        # Update application with result
+        update_data = {
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "answers_used": result.answers_used,
+        }
+
+        if result.success:
+            if result.status == "dry_run":
+                update_data["status"] = "dry_run"
+            else:
+                update_data["status"] = "submitted"
+                update_data["submitted_at"] = datetime.now(timezone.utc).isoformat()
+                if result.confirmation_number:
+                    update_data["confirmation_number"] = result.confirmation_number
+        else:
+            update_data["status"] = "failed"
+            update_data["last_error"] = result.error
+
+        supabase.table("applications").update(update_data).eq("id", application_id).execute()
+
+        return {
+            "success": result.success,
+            "status": result.status,
+            "error": result.error,
+            "confirmation_number": result.confirmation_number,
+            "screenshot_path": result.screenshot_path,
+            "ai_calls_made": result.ai_calls_made,
+            "answers_used": result.answers_used,
+            "used_browserbase": use_browserbase and browserbase_session is not None,
+            "browserbase_session_id": browserbase_session["id"] if browserbase_session else None,
+            "improvement_logs": [
+                {
+                    "question": log.question,
+                    "field_type": log.field_type,
+                    "options": log.options,
+                    "reason": log.reason,
+                }
+                for log in result.improvement_logs
+            ] if result.improvement_logs else []
+        }
+
+    except Exception as e:
+        logger.error(f"Pipeline error for application {application_id}: {e}")
+
+        # Update application status to failed
+        supabase.table("applications").update({
+            "status": "failed",
+            "last_error": str(e),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }).eq("id", application_id).execute()
+
+        return {
+            "success": False,
+            "status": "failed",
+            "error": str(e),
+            "used_browserbase": browserbase_session is not None,
+            "browserbase_session_id": browserbase_session["id"] if browserbase_session else None
+        }
+
+
+async def process_queued_applications(
+    user_id: Optional[str] = None,
+    limit: int = 10,
+    dry_run: bool = False,
+    use_browserbase: bool = True
+) -> Dict[str, Any]:
+    """
+    Process queued applications for a user or all users.
+
+    Args:
+        user_id: Optional user ID to process for. If None, processes all queued.
+        limit: Maximum number of applications to process
+        dry_run: If True, fill forms but don't submit
+        use_browserbase: If True, use BrowserBase cloud browsers
+
+    Returns:
+        Dict with processing results
+    """
+    supabase = get_supabase()
+
+    # Fetch queued applications
+    query = supabase.table("applications").select(
+        "id, user_id, job_id"
+    ).eq("status", "queued").limit(limit)
+
+    if user_id:
+        query = query.eq("user_id", user_id)
+
+    result = query.execute()
+
+    if not result.data:
+        return {
+            "success": True,
+            "message": "No queued applications found",
+            "processed": 0,
+            "results": []
+        }
+
+    applications = result.data
+    results = []
+
+    for app in applications:
+        app_result = await run_application_pipeline(
+            user_id=app["user_id"],
+            job_id=app["job_id"],
+            application_id=app["id"],
+            dry_run=dry_run,
+            use_browserbase=use_browserbase
+        )
+        results.append({
+            "application_id": app["id"],
+            **app_result
+        })
+
+        # Small delay between applications
+        await asyncio.sleep(2)
+
+    successful = sum(1 for r in results if r["success"])
+
+    return {
+        "success": True,
+        "message": f"Processed {len(results)} applications, {successful} successful",
+        "processed": len(results),
+        "successful": successful,
+        "failed": len(results) - successful,
+        "results": results
+    }
+
+
+def is_browserbase_configured() -> bool:
+    """
+    Check if BrowserBase credentials are configured.
+    """
+    browserbase_api_key = getattr(settings, 'browserbase_api_key', None) or os.getenv("BROWSERBASE_API_KEY")
+    browserbase_project_id = getattr(settings, 'browserbase_project_id', None) or os.getenv("BROWSERBASE_PROJECT_ID")
+    return bool(browserbase_api_key and browserbase_project_id)
+
+
+# ============================================================================
+# Browser Session Persistence
+# ============================================================================
+
+def extract_ats_domain(url: str) -> Optional[str]:
+    """
+    Extract the ATS domain from a job URL for session matching.
+    """
+    if not url:
+        return None
+    url_lower = url.lower()
+    for domain in ATS_DOMAINS.keys():
+        if domain in url_lower:
+            return domain
+    return None
+
+
+async def get_saved_session(user_id: str, ats_domain: str) -> Optional[Dict[str, Any]]:
+    """
+    Retrieve a saved browser session for a user and ATS domain.
+    Returns None if no valid session exists.
+    """
+    supabase = get_supabase()
+
+    try:
+        result = supabase.table("browser_sessions").select(
+            "id, cookies, local_storage, session_storage, browserbase_session_id, "
+            "is_logged_in, last_used_at, expires_at"
+        ).eq("user_id", user_id).eq("ats_domain", ats_domain).single().execute()
+
+        if not result.data:
+            return None
+
+        session = result.data
+
+        # Check if session has expired
+        if session.get("expires_at"):
+            expires_at = datetime.fromisoformat(session["expires_at"].replace("Z", "+00:00"))
+            if expires_at < datetime.now(timezone.utc):
+                logger.info(f"Session expired for user {user_id} on {ats_domain}")
+                # Delete expired session
+                supabase.table("browser_sessions").delete().eq("id", session["id"]).execute()
+                return None
+
+        logger.info(f"Found saved session for user {user_id} on {ats_domain} (logged_in: {session.get('is_logged_in')})")
+        return session
+
+    except Exception as e:
+        logger.warning(f"Error fetching saved session: {e}")
+        return None
+
+
+async def save_browser_session(
+    user_id: str,
+    ats_domain: str,
+    cookies: list,
+    local_storage: Optional[Dict[str, str]] = None,
+    session_storage: Optional[Dict[str, str]] = None,
+    browserbase_session_id: Optional[str] = None,
+    is_logged_in: bool = False,
+    expires_in_hours: int = 24
+) -> Optional[str]:
+    """
+    Save browser session data for a user and ATS domain.
+    Returns the session ID on success.
+    """
+    supabase = get_supabase()
+
+    try:
+        expires_at = datetime.now(timezone.utc).replace(
+            hour=datetime.now(timezone.utc).hour + expires_in_hours
+        )
+
+        # Check if session already exists
+        existing = supabase.table("browser_sessions").select("id").eq(
+            "user_id", user_id
+        ).eq("ats_domain", ats_domain).execute()
+
+        session_data = {
+            "user_id": user_id,
+            "ats_domain": ats_domain,
+            "cookies": cookies,
+            "local_storage": local_storage or {},
+            "session_storage": session_storage or {},
+            "browserbase_session_id": browserbase_session_id,
+            "is_logged_in": is_logged_in,
+            "last_used_at": datetime.now(timezone.utc).isoformat(),
+            "expires_at": expires_at.isoformat(),
+        }
+
+        if existing.data:
+            # Update existing session
+            result = supabase.table("browser_sessions").update(session_data).eq(
+                "id", existing.data[0]["id"]
+            ).execute()
+            session_id = existing.data[0]["id"]
+            logger.info(f"Updated browser session {session_id} for user {user_id} on {ats_domain}")
+        else:
+            # Create new session
+            result = supabase.table("browser_sessions").insert(session_data).execute()
+            session_id = result.data[0]["id"] if result.data else None
+            logger.info(f"Created browser session {session_id} for user {user_id} on {ats_domain}")
+
+        return session_id
+
+    except Exception as e:
+        logger.error(f"Error saving browser session: {e}")
+        return None
+
+
+async def restore_session_to_context(
+    context,
+    saved_session: Dict[str, Any]
+) -> bool:
+    """
+    Restore cookies and storage from a saved session to a browser context.
+    Returns True if successful.
+    """
+    try:
+        # Restore cookies
+        cookies = saved_session.get("cookies", [])
+        if cookies:
+            await context.add_cookies(cookies)
+            logger.info(f"Restored {len(cookies)} cookies to browser context")
+
+        # Note: localStorage and sessionStorage restoration requires page-level access
+        # They will be set after navigating to the domain
+        return True
+
+    except Exception as e:
+        logger.error(f"Error restoring session to context: {e}")
+        return False
+
+
+async def restore_storage_to_page(
+    page,
+    saved_session: Dict[str, Any],
+    url: str
+) -> bool:
+    """
+    Restore localStorage and sessionStorage to a page after navigation.
+    Must be called after page.goto() to the target domain.
+    """
+    try:
+        local_storage = saved_session.get("local_storage", {})
+        session_storage = saved_session.get("session_storage", {})
+
+        if local_storage:
+            for key, value in local_storage.items():
+                await page.evaluate(f"localStorage.setItem('{key}', '{value}')")
+            logger.info(f"Restored {len(local_storage)} localStorage items")
+
+        if session_storage:
+            for key, value in session_storage.items():
+                await page.evaluate(f"sessionStorage.setItem('{key}', '{value}')")
+            logger.info(f"Restored {len(session_storage)} sessionStorage items")
+
+        return True
+
+    except Exception as e:
+        logger.error(f"Error restoring storage to page: {e}")
+        return False
+
+
+async def capture_session_from_context(context, page) -> Dict[str, Any]:
+    """
+    Capture cookies and storage from the current browser context/page.
+    """
+    try:
+        # Get cookies
+        cookies = await context.cookies()
+
+        # Get localStorage and sessionStorage
+        local_storage = await page.evaluate("() => { const items = {}; for (let i = 0; i < localStorage.length; i++) { const key = localStorage.key(i); items[key] = localStorage.getItem(key); } return items; }")
+        session_storage = await page.evaluate("() => { const items = {}; for (let i = 0; i < sessionStorage.length; i++) { const key = sessionStorage.key(i); items[key] = sessionStorage.getItem(key); } return items; }")
+
+        return {
+            "cookies": cookies,
+            "local_storage": local_storage,
+            "session_storage": session_storage
+        }
+
+    except Exception as e:
+        logger.error(f"Error capturing session: {e}")
+        return {"cookies": [], "local_storage": {}, "session_storage": {}}
+
+
+async def delete_user_session(user_id: str, ats_domain: Optional[str] = None) -> int:
+    """
+    Delete saved browser sessions for a user.
+    If ats_domain is provided, only delete that specific session.
+    Returns the number of sessions deleted.
+    """
+    supabase = get_supabase()
+
+    try:
+        query = supabase.table("browser_sessions").delete().eq("user_id", user_id)
+
+        if ats_domain:
+            query = query.eq("ats_domain", ats_domain)
+
+        result = query.execute()
+        deleted_count = len(result.data) if result.data else 0
+
+        logger.info(f"Deleted {deleted_count} browser sessions for user {user_id}")
+        return deleted_count
+
+    except Exception as e:
+        logger.error(f"Error deleting browser sessions: {e}")
+        return 0
+
+
+async def get_user_sessions(user_id: str) -> list:
+    """
+    Get all saved browser sessions for a user.
+    """
+    supabase = get_supabase()
+
+    try:
+        result = supabase.table("browser_sessions").select(
+            "id, ats_domain, is_logged_in, last_used_at, expires_at"
+        ).eq("user_id", user_id).execute()
+
+        return result.data or []
+
+    except Exception as e:
+        logger.error(f"Error fetching user sessions: {e}")
+        return []

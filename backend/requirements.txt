@@ -7,3 +7,5 @@ pydantic==2.10.3
 pydantic-settings==2.6.1
 supabase==2.10.0
 openai==1.58.1
+playwright==1.49.0
+browserbase==1.4.0
