@@ -20,11 +20,17 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime, timezone
 
 from app.database import get_supabase
+from app.config import get_settings
 from app.services.automation_service import (
     run_application_pipeline,
     detect_ats_platform,
     is_browserbase_configured
 )
+
+# Get settings for parallel processing
+settings = get_settings()
+MAX_CONCURRENT_SESSIONS = settings.max_concurrent_sessions
+DELAY_BETWEEN_BATCHES = settings.delay_between_batches
 
 logger = logging.getLogger(__name__)
 
@@ -366,7 +372,8 @@ async def process_application_queue(
     limit: int = 10,
     dry_run: bool = False,
     use_browserbase: bool = True,
-    delay_between_apps: float = 5.0
+    delay_between_apps: float = 5.0,
+    generate_cover_letter: bool = False
 ) -> Dict[str, Any]:
     """
     Process queued applications by running automation pipelines.
@@ -377,6 +384,7 @@ async def process_application_queue(
         dry_run: If True, fill forms but don't submit
         use_browserbase: If True, use BrowserBase cloud browsers
         delay_between_apps: Seconds to wait between applications
+        generate_cover_letter: If True, generate tailored cover letter for each application
 
     Returns:
         Processing results summary
@@ -422,7 +430,8 @@ async def process_application_queue(
                 job_id=app["job_id"],
                 application_id=app["id"],
                 dry_run=dry_run,
-                use_browserbase=use_browserbase
+                use_browserbase=use_browserbase,
+                generate_cover_letter_flag=generate_cover_letter
             )
 
             results.append({
@@ -466,13 +475,193 @@ async def process_application_queue(
     }
 
 
+async def process_application_queue_parallel(
+    user_id: Optional[str] = None,
+    limit: int = 50,
+    dry_run: bool = False,
+    use_browserbase: bool = True,
+    max_concurrent: Optional[int] = None,
+    generate_cover_letter: bool = False
+) -> Dict[str, Any]:
+    """
+    Process queued applications in parallel using BrowserBase concurrent sessions.
+
+    Uses asyncio.Semaphore to limit concurrent browser sessions to avoid
+    overwhelming BrowserBase and to stay within plan limits.
+
+    Args:
+        user_id: Optional specific user ID
+        limit: Maximum applications to process
+        dry_run: If True, fill forms but don't submit
+        use_browserbase: If True, use BrowserBase cloud browsers
+        max_concurrent: Max concurrent sessions (defaults to config value)
+        generate_cover_letter: If True, generate tailored cover letter for each application
+
+    Returns:
+        Processing results summary
+    """
+    supabase = get_supabase()
+    concurrent_limit = max_concurrent or MAX_CONCURRENT_SESSIONS
+
+    logger.info(f"Starting PARALLEL application queue processing")
+    logger.info(f"  - Limit: {limit} applications")
+    logger.info(f"  - Max concurrent sessions: {concurrent_limit}")
+    logger.info(f"  - Dry run: {dry_run}")
+
+    # Fetch queued applications
+    query = supabase.table("applications").select(
+        "id, user_id, job_id, match_score, "
+        "jobs(title, company, apply_url)"
+    ).eq("status", "queued").order("match_score", desc=True).limit(limit)
+
+    if user_id:
+        query = query.eq("user_id", user_id)
+
+    result = query.execute()
+    applications = result.data or []
+
+    if not applications:
+        return {
+            "success": True,
+            "message": "No queued applications found",
+            "processed": 0,
+            "successful": 0,
+            "failed": 0,
+            "parallel_mode": True,
+            "max_concurrent": concurrent_limit,
+            "results": []
+        }
+
+    logger.info(f"Found {len(applications)} queued applications to process in parallel")
+
+    # Semaphore to limit concurrent sessions
+    semaphore = asyncio.Semaphore(concurrent_limit)
+
+    # Track results thread-safely
+    results_lock = asyncio.Lock()
+    results = []
+    successful = 0
+    failed = 0
+
+    async def process_single_application(app: Dict, worker_id: int) -> Dict:
+        """Process a single application with semaphore limiting."""
+        nonlocal successful, failed
+
+        job = app.get("jobs", {})
+        job_title = job.get("title", "Unknown")
+        company = job.get("company", "Unknown")
+
+        async with semaphore:
+            logger.info(f"[Worker {worker_id}] Starting: {job_title} at {company}")
+            start_time = datetime.now(timezone.utc)
+
+            try:
+                app_result = await run_application_pipeline(
+                    user_id=app["user_id"],
+                    job_id=app["job_id"],
+                    application_id=app["id"],
+                    dry_run=dry_run,
+                    use_browserbase=use_browserbase,
+                    worker_id=worker_id,
+                    generate_cover_letter_flag=generate_cover_letter
+                )
+
+                duration = (datetime.now(timezone.utc) - start_time).total_seconds()
+
+                result_data = {
+                    "application_id": app["id"],
+                    "job_title": job_title,
+                    "company": company,
+                    "match_score": app.get("match_score"),
+                    "worker_id": worker_id,
+                    "duration_seconds": round(duration, 1),
+                    **app_result
+                }
+
+                async with results_lock:
+                    results.append(result_data)
+                    if app_result.get("success"):
+                        successful += 1
+                        logger.info(f"[Worker {worker_id}] SUCCESS: {job_title} at {company} ({duration:.1f}s)")
+                    else:
+                        failed += 1
+                        logger.warning(f"[Worker {worker_id}] FAILED: {job_title} - {app_result.get('error', 'Unknown error')}")
+
+                # Small delay after completing to avoid rate limiting
+                await asyncio.sleep(DELAY_BETWEEN_BATCHES)
+
+                return result_data
+
+            except Exception as e:
+                duration = (datetime.now(timezone.utc) - start_time).total_seconds()
+                error_msg = str(e)
+                logger.error(f"[Worker {worker_id}] ERROR processing {job_title}: {error_msg}")
+
+                result_data = {
+                    "application_id": app["id"],
+                    "job_title": job_title,
+                    "company": company,
+                    "match_score": app.get("match_score"),
+                    "worker_id": worker_id,
+                    "duration_seconds": round(duration, 1),
+                    "success": False,
+                    "error": error_msg
+                }
+
+                async with results_lock:
+                    results.append(result_data)
+                    failed += 1
+
+                return result_data
+
+    # Create all tasks with worker IDs
+    tasks = [
+        process_single_application(app, worker_id=i)
+        for i, app in enumerate(applications)
+    ]
+
+    logger.info(f"Launching {len(tasks)} tasks with {concurrent_limit} concurrent workers...")
+    pipeline_start = datetime.now(timezone.utc)
+
+    # Run all tasks concurrently (semaphore limits actual concurrency)
+    await asyncio.gather(*tasks, return_exceptions=True)
+
+    pipeline_duration = (datetime.now(timezone.utc) - pipeline_start).total_seconds()
+
+    # Sort results by worker_id for consistent output
+    results.sort(key=lambda x: x.get("worker_id", 0))
+
+    logger.info(f"Parallel processing complete:")
+    logger.info(f"  - Total: {len(applications)}")
+    logger.info(f"  - Successful: {successful}")
+    logger.info(f"  - Failed: {failed}")
+    logger.info(f"  - Duration: {pipeline_duration:.1f}s")
+    logger.info(f"  - Avg per app: {pipeline_duration/len(applications):.1f}s")
+
+    return {
+        "success": True,
+        "message": f"Processed {len(applications)} applications in parallel: {successful} successful, {failed} failed",
+        "processed": len(applications),
+        "successful": successful,
+        "failed": failed,
+        "dry_run": dry_run,
+        "parallel_mode": True,
+        "max_concurrent": concurrent_limit,
+        "total_duration_seconds": round(pipeline_duration, 1),
+        "avg_duration_per_app": round(pipeline_duration / len(applications), 1) if applications else 0,
+        "used_browserbase": use_browserbase and is_browserbase_configured(),
+        "results": results
+    }
+
+
 async def run_full_pipeline(
     top_matches_per_user: int = 3,
     min_match_score: float = 0.3,
     max_applications: int = 10,
     dry_run: bool = False,
     use_browserbase: bool = True,
-    user_id: Optional[str] = None
+    user_id: Optional[str] = None,
+    generate_cover_letter: bool = False
 ) -> Dict[str, Any]:
     """
     Run the complete pipeline: match + queue + process.
@@ -486,6 +675,7 @@ async def run_full_pipeline(
         dry_run: If True, fill forms but don't submit
         use_browserbase: If True, use BrowserBase cloud browsers
         user_id: Optional specific user ID
+        generate_cover_letter: If True, generate tailored cover letter for each application
 
     Returns:
         Complete pipeline results
@@ -512,7 +702,8 @@ async def run_full_pipeline(
         user_id=user_id,
         limit=max_applications,
         dry_run=dry_run,
-        use_browserbase=use_browserbase
+        use_browserbase=use_browserbase,
+        generate_cover_letter=generate_cover_letter
     )
 
     end_time = datetime.now(timezone.utc)
@@ -540,6 +731,112 @@ async def run_full_pipeline(
             "successful": processing_result.get("successful", 0),
             "failed": processing_result.get("failed", 0),
             "dry_run": dry_run,
+            "used_browserbase": processing_result.get("used_browserbase", False),
+            "results": processing_result.get("results", [])
+        }
+    }
+
+
+async def run_full_pipeline_parallel(
+    top_matches_per_user: int = 3,
+    min_match_score: float = 0.3,
+    max_applications: int = 50,
+    dry_run: bool = False,
+    use_browserbase: bool = True,
+    max_concurrent: Optional[int] = None,
+    user_id: Optional[str] = None,
+    generate_cover_letter: bool = False
+) -> Dict[str, Any]:
+    """
+    Run the complete pipeline with PARALLEL processing: match + queue + process in parallel.
+
+    This is the production-ready entry point that can handle large queues efficiently
+    by running multiple BrowserBase sessions concurrently.
+
+    Args:
+        top_matches_per_user: Number of top matches per user
+        min_match_score: Minimum match score threshold
+        max_applications: Maximum applications to process in this run
+        dry_run: If True, fill forms but don't submit
+        use_browserbase: If True, use BrowserBase cloud browsers
+        max_concurrent: Max concurrent sessions (defaults to config)
+        user_id: Optional specific user ID
+        generate_cover_letter: If True, generate tailored cover letter for each application
+
+    Returns:
+        Complete pipeline results with parallel processing metrics
+    """
+    concurrent_limit = max_concurrent or MAX_CONCURRENT_SESSIONS
+
+    start_time = datetime.now(timezone.utc)
+    logger.info("=" * 60)
+    logger.info("STARTING FULL MATCHING & PARALLEL AUTOMATION PIPELINE")
+    logger.info(f"Max concurrent sessions: {concurrent_limit}")
+    logger.info("=" * 60)
+
+    # Step 1: Run matching pipeline (same as sequential)
+    logger.info("Step 1: Running matching pipeline...")
+    matching_result = await run_matching_pipeline(
+        top_matches_per_user=top_matches_per_user,
+        min_match_score=min_match_score,
+        auto_queue=True,
+        user_id=user_id
+    )
+
+    logger.info(f"Matching complete: {matching_result['applications_queued']} applications queued")
+
+    # Step 2: Process queue IN PARALLEL
+    logger.info(f"Step 2: Processing application queue in PARALLEL ({concurrent_limit} concurrent)...")
+    processing_result = await process_application_queue_parallel(
+        user_id=user_id,
+        limit=max_applications,
+        dry_run=dry_run,
+        use_browserbase=use_browserbase,
+        max_concurrent=concurrent_limit,
+        generate_cover_letter=generate_cover_letter
+    )
+
+    end_time = datetime.now(timezone.utc)
+    duration = (end_time - start_time).total_seconds()
+
+    # Calculate efficiency metrics
+    apps_processed = processing_result.get("processed", 0)
+    sequential_estimate = apps_processed * 180  # ~3 min per app sequential
+    time_saved = sequential_estimate - duration if apps_processed > 0 else 0
+    speedup_factor = sequential_estimate / duration if duration > 0 and apps_processed > 0 else 1
+
+    logger.info("=" * 60)
+    logger.info(f"PARALLEL PIPELINE COMPLETE - Duration: {duration:.1f}s")
+    logger.info(f"Sequential estimate would be: {sequential_estimate:.1f}s")
+    logger.info(f"Time saved: {time_saved:.1f}s ({speedup_factor:.1f}x speedup)")
+    logger.info("=" * 60)
+
+    return {
+        "success": True,
+        "parallel_mode": True,
+        "max_concurrent_sessions": concurrent_limit,
+        "pipeline_started_at": start_time.isoformat(),
+        "pipeline_completed_at": end_time.isoformat(),
+        "duration_seconds": round(duration, 1),
+        "efficiency": {
+            "sequential_estimate_seconds": round(sequential_estimate, 1),
+            "time_saved_seconds": round(time_saved, 1),
+            "speedup_factor": round(speedup_factor, 2)
+        },
+        "matching": {
+            "users_processed": matching_result.get("users_processed", 0),
+            "jobs_evaluated": matching_result.get("jobs_evaluated", 0),
+            "matches_found": matching_result.get("total_matches_found", 0),
+            "applications_created": matching_result.get("applications_created", 0),
+            "applications_queued": matching_result.get("applications_queued", 0),
+            "user_summaries": matching_result.get("user_summaries", [])
+        },
+        "processing": {
+            "applications_processed": processing_result.get("processed", 0),
+            "successful": processing_result.get("successful", 0),
+            "failed": processing_result.get("failed", 0),
+            "dry_run": dry_run,
+            "avg_duration_per_app": processing_result.get("avg_duration_per_app", 0),
             "used_browserbase": processing_result.get("used_browserbase", False),
             "results": processing_result.get("results", [])
         }

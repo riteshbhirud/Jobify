@@ -14,7 +14,10 @@ from app.database import get_supabase
 from app.services.matching_pipeline import (
     run_matching_pipeline,
     process_application_queue,
-    run_full_pipeline
+    process_application_queue_parallel,
+    run_full_pipeline,
+    run_full_pipeline_parallel,
+    MAX_CONCURRENT_SESSIONS
 )
 from app.services.automation_service import is_browserbase_configured
 
@@ -135,6 +138,7 @@ async def trigger_queue_processing(
     limit: int = Query(10, ge=1, le=50, description="Maximum applications to process"),
     dry_run: bool = Query(False, description="Fill forms but don't submit"),
     use_browserbase: bool = Query(True, description="Use BrowserBase cloud browsers"),
+    generate_cover_letter: bool = Query(False, description="Generate tailored cover letter for each application"),
     user_id: Optional[str] = Query(None, description="Process for specific user only"),
     run_async: bool = Query(True, description="Run in background")
 ):
@@ -143,6 +147,9 @@ async def trigger_queue_processing(
 
     Takes applications with status='queued' and runs the automation
     pipeline to fill out and submit job applications.
+
+    Set generate_cover_letter=true to generate a tailored cover letter using OpenAI
+    for each application (adds ~2-3 seconds per app).
     """
     if _pipeline_status["is_running"]:
         raise HTTPException(
@@ -159,7 +166,8 @@ async def trigger_queue_processing(
                 user_id=user_id,
                 limit=limit,
                 dry_run=dry_run,
-                use_browserbase=use_browserbase
+                use_browserbase=use_browserbase,
+                generate_cover_letter=generate_cover_letter
             )
             _pipeline_status["last_result"] = result
             return result
@@ -176,11 +184,85 @@ async def trigger_queue_processing(
                 "limit": limit,
                 "dry_run": dry_run,
                 "use_browserbase": use_browserbase,
+                "generate_cover_letter": generate_cover_letter,
                 "user_id": user_id
             }
         }
     else:
         result = await run_processing()
+        return result
+
+
+@router.post("/process-queue-parallel")
+async def trigger_queue_processing_parallel(
+    background_tasks: BackgroundTasks,
+    limit: int = Query(50, ge=1, le=200, description="Maximum applications to process"),
+    dry_run: bool = Query(False, description="Fill forms but don't submit"),
+    use_browserbase: bool = Query(True, description="Use BrowserBase cloud browsers"),
+    max_concurrent: int = Query(MAX_CONCURRENT_SESSIONS, ge=1, le=10, description="Max concurrent browser sessions"),
+    generate_cover_letter: bool = Query(False, description="Generate tailored cover letter for each application"),
+    user_id: Optional[str] = Query(None, description="Process for specific user only"),
+    run_async: bool = Query(True, description="Run in background")
+):
+    """
+    Process queued applications in PARALLEL mode.
+
+    Uses asyncio.Semaphore to run multiple BrowserBase sessions concurrently.
+    This is significantly faster than sequential processing for large queues.
+
+    - max_concurrent: Controls how many browser sessions run simultaneously
+    - Default is 5 concurrent sessions (BrowserBase plan limit)
+    - Each worker processes one application at a time
+    - generate_cover_letter: Generate tailored cover letter using OpenAI (adds ~2-3s/app)
+    """
+    if _pipeline_status["is_running"]:
+        raise HTTPException(
+            status_code=409,
+            detail="Pipeline is already running. Please wait for it to complete."
+        )
+
+    async def run_parallel_processing():
+        global _pipeline_status
+        _pipeline_status["is_running"] = True
+
+        try:
+            result = await process_application_queue_parallel(
+                user_id=user_id,
+                limit=limit,
+                dry_run=dry_run,
+                use_browserbase=use_browserbase,
+                max_concurrent=max_concurrent,
+                generate_cover_letter=generate_cover_letter
+            )
+            _pipeline_status["last_result"] = result
+            return result
+        finally:
+            _pipeline_status["is_running"] = False
+
+    browserbase_available = is_browserbase_configured()
+
+    if run_async:
+        background_tasks.add_task(run_parallel_processing)
+        return {
+            "success": True,
+            "message": f"PARALLEL queue processing started in background",
+            "status": "processing",
+            "parallel_mode": True,
+            "max_concurrent_sessions": max_concurrent,
+            "generate_cover_letter": generate_cover_letter,
+            "browserbase_configured": browserbase_available,
+            "will_use_browserbase": use_browserbase and browserbase_available,
+            "params": {
+                "limit": limit,
+                "dry_run": dry_run,
+                "use_browserbase": use_browserbase,
+                "max_concurrent": max_concurrent,
+                "generate_cover_letter": generate_cover_letter,
+                "user_id": user_id
+            }
+        }
+    else:
+        result = await run_parallel_processing()
         return result
 
 
@@ -192,6 +274,7 @@ async def trigger_full_pipeline(
     max_applications: int = Query(10, ge=1, le=50, description="Maximum applications to process"),
     dry_run: bool = Query(False, description="Fill forms but don't submit"),
     use_browserbase: bool = Query(True, description="Use BrowserBase cloud browsers"),
+    generate_cover_letter: bool = Query(False, description="Generate tailored cover letter for each application"),
     user_id: Optional[str] = Query(None, description="Run for specific user only"),
     run_async: bool = Query(True, description="Run in background")
 ):
@@ -204,6 +287,7 @@ async def trigger_full_pipeline(
     3. Processes the queue by filling out applications
 
     Use this for manual triggers or scheduled runs.
+    Set generate_cover_letter=true to generate tailored cover letters.
     """
     if _pipeline_status["is_running"]:
         raise HTTPException(
@@ -223,7 +307,8 @@ async def trigger_full_pipeline(
                 max_applications=max_applications,
                 dry_run=dry_run,
                 use_browserbase=use_browserbase,
-                user_id=user_id
+                user_id=user_id,
+                generate_cover_letter=generate_cover_letter
             )
             _pipeline_status["last_result"] = result
             return result
@@ -246,6 +331,91 @@ async def trigger_full_pipeline(
                 "max_applications": max_applications,
                 "dry_run": dry_run,
                 "use_browserbase": use_browserbase,
+                "generate_cover_letter": generate_cover_letter,
+                "user_id": user_id
+            }
+        }
+    else:
+        result = await run_pipeline()
+        return result
+
+
+@router.post("/run-parallel")
+async def trigger_full_pipeline_parallel(
+    background_tasks: BackgroundTasks,
+    top_matches_per_user: int = Query(3, ge=1, le=10, description="Number of top matches per user"),
+    min_match_score: float = Query(0.3, ge=0.0, le=1.0, description="Minimum match score threshold"),
+    max_applications: int = Query(50, ge=1, le=200, description="Maximum applications to process"),
+    dry_run: bool = Query(False, description="Fill forms but don't submit"),
+    use_browserbase: bool = Query(True, description="Use BrowserBase cloud browsers"),
+    max_concurrent: int = Query(MAX_CONCURRENT_SESSIONS, ge=1, le=10, description="Max concurrent browser sessions"),
+    generate_cover_letter: bool = Query(False, description="Generate tailored cover letter for each application"),
+    user_id: Optional[str] = Query(None, description="Run for specific user only"),
+    run_async: bool = Query(True, description="Run in background")
+):
+    """
+    Run the complete pipeline with PARALLEL processing: match + queue + process concurrently.
+
+    This is the PRODUCTION-READY endpoint that:
+    1. Matches all active users to their top N jobs
+    2. Creates and queues application records
+    3. Processes the queue with MULTIPLE concurrent BrowserBase sessions
+    4. Optionally generates tailored cover letters for each application
+
+    Use this for production runs with large queues - significantly faster than /run.
+
+    Example: With 5 concurrent sessions and 25 applications:
+    - Sequential: ~75 minutes (3 min/app × 25)
+    - Parallel: ~15 minutes (5 apps at a time)
+    """
+    if _pipeline_status["is_running"]:
+        raise HTTPException(
+            status_code=409,
+            detail="Pipeline is already running. Please wait for it to complete."
+        )
+
+    async def run_pipeline():
+        global _pipeline_status
+        _pipeline_status["is_running"] = True
+        _pipeline_status["last_run"] = datetime.now(timezone.utc).isoformat()
+
+        try:
+            result = await run_full_pipeline_parallel(
+                top_matches_per_user=top_matches_per_user,
+                min_match_score=min_match_score,
+                max_applications=max_applications,
+                dry_run=dry_run,
+                use_browserbase=use_browserbase,
+                max_concurrent=max_concurrent,
+                user_id=user_id,
+                generate_cover_letter=generate_cover_letter
+            )
+            _pipeline_status["last_result"] = result
+            return result
+        finally:
+            _pipeline_status["is_running"] = False
+
+    browserbase_available = is_browserbase_configured()
+
+    if run_async:
+        background_tasks.add_task(run_pipeline)
+        return {
+            "success": True,
+            "message": "Full PARALLEL pipeline started in background",
+            "status": "processing",
+            "parallel_mode": True,
+            "max_concurrent_sessions": max_concurrent,
+            "generate_cover_letter": generate_cover_letter,
+            "browserbase_configured": browserbase_available,
+            "will_use_browserbase": use_browserbase and browserbase_available,
+            "params": {
+                "top_matches_per_user": top_matches_per_user,
+                "min_match_score": min_match_score,
+                "max_applications": max_applications,
+                "dry_run": dry_run,
+                "use_browserbase": use_browserbase,
+                "max_concurrent": max_concurrent,
+                "generate_cover_letter": generate_cover_letter,
                 "user_id": user_id
             }
         }

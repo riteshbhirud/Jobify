@@ -23,11 +23,26 @@ sys.path.insert(0, str(AUTOMATION_SCRIPT_DIR))
 
 from playwright.async_api import async_playwright
 
+from openai import OpenAI
+
 from app.database import get_supabase
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+# Initialize OpenAI client
+_openai_client = None
+
+def get_openai_client() -> OpenAI:
+    """Get or create OpenAI client."""
+    global _openai_client
+    if _openai_client is None:
+        api_key = settings.openai_api_key or os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError("OpenAI API key not configured")
+        _openai_client = OpenAI(api_key=api_key)
+    return _openai_client
 
 
 # ATS domain to pipeline mapping
@@ -163,6 +178,173 @@ def cleanup_temp_file(file_path: str) -> None:
             logger.debug(f"Cleaned up temp file: {file_path}")
         except Exception as e:
             logger.warning(f"Failed to clean up temp file {file_path}: {e}")
+
+
+async def generate_cover_letter(
+    user_profile: Dict[str, Any],
+    job_info: Dict[str, Any]
+) -> Tuple[Optional[str], bool]:
+    """
+    Generate a tailored cover letter using OpenAI.
+
+    The cover letter is designed to:
+    - Sound human/student-written, NOT AI-generated
+    - Be tailored to the specific job and user's background
+    - Be max 1 page (~300-400 words)
+    - Have natural imperfections and personal voice
+
+    Args:
+        user_profile: User's profile with experience, skills, education
+        job_info: Job details including title, company, description
+
+    Returns:
+        Tuple of (cover_letter_text, success_flag)
+    """
+    try:
+        client = get_openai_client()
+
+        # Extract key info from user profile
+        user_name = f"{user_profile.get('first_name', '')} {user_profile.get('last_name', '')}".strip()
+        user_email = user_profile.get('email', '')
+        user_phone = user_profile.get('phone', '')
+        target_role = user_profile.get('target_role', '')
+        skills = user_profile.get('skills', [])
+        experience = user_profile.get('experience', [])
+        education = user_profile.get('education', [])
+        projects = user_profile.get('projects', [])
+
+        # Format experience for prompt
+        experience_text = ""
+        if experience:
+            for exp in experience[:3]:  # Top 3 experiences
+                if isinstance(exp, dict):
+                    exp_title = exp.get('title', exp.get('position', ''))
+                    exp_company = exp.get('company', '')
+                    exp_desc = exp.get('description', '')[:200] if exp.get('description') else ''
+                    experience_text += f"- {exp_title} at {exp_company}: {exp_desc}\n"
+
+        # Format education
+        education_text = ""
+        if education:
+            for edu in education[:2]:
+                if isinstance(edu, dict):
+                    degree = edu.get('degree', '')
+                    school = edu.get('school', edu.get('institution', ''))
+                    education_text += f"- {degree} from {school}\n"
+
+        # Format projects
+        projects_text = ""
+        if projects:
+            for proj in projects[:2]:
+                if isinstance(proj, dict):
+                    proj_name = proj.get('name', proj.get('title', ''))
+                    proj_desc = proj.get('description', '')[:150] if proj.get('description') else ''
+                    projects_text += f"- {proj_name}: {proj_desc}\n"
+
+        # Job info
+        job_title = job_info.get('title', 'the position')
+        company = job_info.get('company', 'your company')
+        job_description = job_info.get('description', '')[:1500] if job_info.get('description') else ''
+
+        prompt = f"""Write a cover letter for a job application. The letter must sound like it was written by a real college student or recent graduate - natural, genuine, and definitely NOT AI-generated.
+
+CRITICAL REQUIREMENTS:
+- Sound like a real person wrote it, not AI
+- Use casual-professional tone, like a motivated student would write
+- Include 1-2 minor imperfections (like starting a sentence with "And" or using contractions naturally)
+- Be specific about why this role/company interests you (make educated guesses based on company name)
+- Connect your actual experience to the job naturally
+- Show enthusiasm without being over-the-top
+- Keep it under 350 words (fits on one page)
+- Don't use clichés like "I am writing to express my interest" or "I believe I would be a great fit"
+- Don't list skills robotically - weave them into stories
+- Use "I" statements naturally but don't start every sentence with "I"
+
+APPLICANT INFO:
+Name: {user_name}
+Target Role: {target_role}
+Skills: {', '.join(skills[:8]) if skills else 'Not specified'}
+
+Experience:
+{experience_text if experience_text else 'Recent graduate / limited experience'}
+
+Education:
+{education_text if education_text else 'Not specified'}
+
+Projects:
+{projects_text if projects_text else 'None listed'}
+
+JOB INFO:
+Position: {job_title}
+Company: {company}
+Description excerpt: {job_description[:800] if job_description else 'Not provided'}
+
+Write the cover letter now. Start directly with the greeting (Dear Hiring Manager or Dear [Company] Team), no header/address block needed. End with a simple sign-off using the applicant's name."""
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",  # Fast and cost-effective
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a helpful assistant that writes authentic, human-sounding cover letters. Your writing should feel like a real college student or recent grad wrote it - natural, genuine, with personality. Never sound robotic or AI-generated."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            max_tokens=600,
+            temperature=0.8  # Higher temperature for more natural variation
+        )
+
+        cover_letter = response.choices[0].message.content.strip()
+        logger.info(f"Generated cover letter for {user_name} applying to {company} ({len(cover_letter)} chars)")
+
+        return (cover_letter, True)
+
+    except Exception as e:
+        logger.error(f"Failed to generate cover letter: {e}")
+        return (None, False)
+
+
+def save_cover_letter_to_temp(cover_letter_text: str, user_id: str) -> Tuple[Optional[str], bool]:
+    """
+    Save cover letter text to a temporary PDF file.
+
+    Args:
+        cover_letter_text: The cover letter text content
+        user_id: User ID for file naming
+
+    Returns:
+        Tuple of (temp_file_path, success_flag)
+    """
+    temp_path = None
+    try:
+        # Create temp file with .txt extension (most ATS accept plain text)
+        temp_file = tempfile.NamedTemporaryFile(
+            suffix='.txt',
+            prefix=f"cover_letter_{user_id[:8]}_",
+            delete=False,
+            mode='w',
+            encoding='utf-8'
+        )
+        temp_path = temp_file.name
+
+        # Write cover letter
+        temp_file.write(cover_letter_text)
+        temp_file.close()
+
+        logger.info(f"Saved cover letter to {temp_path}")
+        return (temp_path, True)
+
+    except Exception as e:
+        logger.error(f"Failed to save cover letter: {e}")
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.unlink(temp_path)
+            except:
+                pass
+        return (None, False)
 
 
 def get_pipeline_class(platform: str):
@@ -310,7 +492,9 @@ async def run_application_pipeline(
     application_id: str,
     dry_run: bool = False,
     use_browserbase: bool = True,
-    headless: bool = True
+    headless: bool = True,
+    worker_id: Optional[int] = None,
+    generate_cover_letter_flag: bool = False
 ) -> Dict[str, Any]:
     """
     Run the automation pipeline to apply for a job.
@@ -322,12 +506,18 @@ async def run_application_pipeline(
         dry_run: If True, fill form but don't submit
         use_browserbase: If True, use BrowserBase cloud browsers (recommended)
         headless: If True and not using BrowserBase, run local browser in headless mode
+        worker_id: Optional worker ID for parallel processing (used in logging)
+        generate_cover_letter_flag: If True, generate tailored cover letter using OpenAI
 
     Returns:
         Dict with result information
     """
     supabase = get_supabase()
     browserbase_session = None
+    temp_cover_letter_path = None  # Track for cleanup
+
+    # Log prefix for worker identification in parallel mode
+    log_prefix = f"[Worker {worker_id}] " if worker_id is not None else ""
 
     try:
         # Update application status to 'started'
@@ -362,7 +552,7 @@ async def run_application_pipeline(
         if not platform:
             raise ValueError(f"Unsupported ATS platform for URL: {apply_url}")
 
-        logger.info(f"Detected ATS platform: {platform} for URL: {apply_url}")
+        logger.info(f"{log_prefix}Detected ATS platform: {platform} for URL: {apply_url}")
 
         # Get pipeline class
         pipeline_class = get_pipeline_class(platform)
@@ -398,8 +588,30 @@ async def run_application_pipeline(
         if not os.path.exists(resume_path) or os.path.getsize(resume_path) == 0:
             raise ValueError(f"Downloaded resume file is invalid or empty: {resume_path}")
 
-        # Cover letter is optional - skip for now (no cover_letter_url in user schema)
+        # Generate cover letter if enabled (before starting BrowserBase session)
         cover_letter_path = None
+        if generate_cover_letter_flag:
+            logger.info(f"{log_prefix}Generating tailored cover letter for {job_info.get('title')} at {job_info.get('company')}...")
+
+            cover_letter_text, cl_success = await generate_cover_letter(
+                user_profile=user_profile,
+                job_info=job_info
+            )
+
+            if cl_success and cover_letter_text:
+                temp_cover_letter_path, save_success = save_cover_letter_to_temp(
+                    cover_letter_text=cover_letter_text,
+                    user_id=user_id
+                )
+                if save_success:
+                    cover_letter_path = temp_cover_letter_path
+                    logger.info(f"{log_prefix}Cover letter ready: {cover_letter_path}")
+                else:
+                    logger.warning(f"{log_prefix}Failed to save cover letter, proceeding without it")
+            else:
+                logger.warning(f"{log_prefix}Failed to generate cover letter, proceeding without it")
+        else:
+            logger.debug(f"{log_prefix}Cover letter generation disabled")
 
         # Run the pipeline with BrowserBase or local browser
         async with async_playwright() as p:
@@ -462,6 +674,10 @@ async def run_application_pipeline(
                 if temp_resume_path:
                     cleanup_temp_file(temp_resume_path)
 
+                # Clean up temporary cover letter file
+                if temp_cover_letter_path:
+                    cleanup_temp_file(temp_cover_letter_path)
+
         # Update application with result
         update_data = {
             "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -506,9 +722,11 @@ async def run_application_pipeline(
     except Exception as e:
         logger.error(f"Pipeline error for application {application_id}: {e}")
 
-        # Clean up temporary resume file if it was created
+        # Clean up temporary files if they were created
         if 'temp_resume_path' in locals() and temp_resume_path:
             cleanup_temp_file(temp_resume_path)
+        if 'temp_cover_letter_path' in locals() and temp_cover_letter_path:
+            cleanup_temp_file(temp_cover_letter_path)
 
         # Update application status to failed
         supabase.table("applications").update({

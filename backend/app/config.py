@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     browserbase_api_key: Optional[str] = None
     browserbase_project_id: Optional[str] = None
 
+    # Parallel processing settings
+    max_concurrent_sessions: int = 5  # BrowserBase concurrent session limit
+    delay_between_batches: float = 2.0  # Seconds between batch completions
+
     class Config:
         env_file = ".env"
         extra = "ignore"
