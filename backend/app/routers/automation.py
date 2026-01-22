@@ -531,7 +531,8 @@ async def test_url_automation(
     use_browserbase: bool = Query(False, description="Use BrowserBase cloud browsers (default: False for local)"),
     headless: bool = Query(True, description="Run browser in headless mode (only for local browser)"),
     generate_cover_letter: bool = Query(False, description="Generate tailored cover letter"),
-    run_async: bool = Query(False, description="Run in background (default: False for immediate result)")
+    run_async: bool = Query(False, description="Run in background (default: False for immediate result)"),
+    keep_browser_open: bool = Query(False, description="Keep browser open after completion (for debugging)")
 ):
     """
     Test automation with a direct URL without creating database records.
@@ -582,7 +583,8 @@ async def test_url_automation(
             dry_run=dry_run,
             use_browserbase=use_browserbase,
             headless=headless,
-            generate_cover_letter_flag=generate_cover_letter
+            generate_cover_letter_flag=generate_cover_letter,
+            keep_browser_open=keep_browser_open
         )
 
         return {
@@ -605,7 +607,8 @@ async def test_url_automation(
             dry_run=dry_run,
             use_browserbase=use_browserbase,
             headless=headless,
-            generate_cover_letter_flag=generate_cover_letter
+            generate_cover_letter_flag=generate_cover_letter,
+            keep_browser_open=keep_browser_open
         )
 
         return {

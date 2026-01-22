@@ -1064,7 +1064,8 @@ async def run_test_pipeline(
     dry_run: bool = True,
     use_browserbase: bool = False,
     headless: bool = True,
-    generate_cover_letter_flag: bool = False
+    generate_cover_letter_flag: bool = False,
+    keep_browser_open: bool = False
 ) -> Dict[str, Any]:
     """
     Run automation pipeline directly from a URL for testing purposes.
@@ -1079,6 +1080,7 @@ async def run_test_pipeline(
         use_browserbase: If True, use BrowserBase cloud browsers
         headless: If True and not using BrowserBase, run local browser in headless mode
         generate_cover_letter_flag: If True, generate tailored cover letter
+        keep_browser_open: If True, don't close the browser after pipeline completes (useful for debugging)
 
     Returns:
         Dict with result information
@@ -1166,57 +1168,63 @@ async def run_test_pipeline(
                     logger.info(f"[TEST] Cover letter ready: {cover_letter_path}")
 
         # Run the pipeline
-        async with async_playwright() as p:
-            browser = None
-            context = None
-            page = None
+        # Note: We don't use 'async with' when keep_browser_open=True because
+        # the context manager would close playwright when exiting, killing the browser
+        p = await async_playwright().start()
+        browser = None
+        context = None
+        page = None
 
-            try:
-                if use_browserbase:
-                    browserbase_session = await create_browserbase_session()
+        try:
+            if use_browserbase:
+                browserbase_session = await create_browserbase_session()
 
-                    if browserbase_session:
-                        logger.info(f"[TEST] Connecting to BrowserBase session: {browserbase_session['id']}")
-                        browser = await p.chromium.connect_over_cdp(browserbase_session["connect_url"])
-                        context = browser.contexts[0]
-                        page = context.pages[0] if context.pages else await context.new_page()
-                        logger.info("[TEST] Successfully connected to BrowserBase")
-                    else:
-                        logger.warning("[TEST] BrowserBase not available, falling back to local browser")
-                        use_browserbase = False
+                if browserbase_session:
+                    logger.info(f"[TEST] Connecting to BrowserBase session: {browserbase_session['id']}")
+                    browser = await p.chromium.connect_over_cdp(browserbase_session["connect_url"])
+                    context = browser.contexts[0]
+                    page = context.pages[0] if context.pages else await context.new_page()
+                    logger.info("[TEST] Successfully connected to BrowserBase")
+                else:
+                    logger.warning("[TEST] BrowserBase not available, falling back to local browser")
+                    use_browserbase = False
 
-                if not use_browserbase or not browser:
-                    logger.info(f"[TEST] Using local Chromium browser (headless={headless})")
-                    browser = await p.chromium.launch(
-                        headless=headless,
-                        slow_mo=100
-                    )
-                    context = await browser.new_context(
-                        viewport={"width": 1920, "height": 1080},
-                        user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                    )
-                    page = await context.new_page()
-
-                # Create pipeline instance
-                pipeline = pipeline_class(
-                    page=page,
-                    user_profile=user_profile,
-                    job_info=job_info,
-                    resume_path=resume_path,
-                    cover_letter_path=cover_letter_path,
-                    dry_run=dry_run
+            if not use_browserbase or not browser:
+                logger.info(f"[TEST] Using local Chromium browser (headless={headless})")
+                browser = await p.chromium.launch(
+                    headless=headless,
+                    slow_mo=100
                 )
+                context = await browser.new_context(
+                    viewport={"width": 1920, "height": 1080},
+                    user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                )
+                page = await context.new_page()
 
-                # Run the pipeline
-                result = await pipeline.run(apply_url)
+            # Create pipeline instance
+            pipeline = pipeline_class(
+                page=page,
+                user_profile=user_profile,
+                job_info=job_info,
+                resume_path=resume_path,
+                cover_letter_path=cover_letter_path,
+                dry_run=dry_run
+            )
 
-            finally:
+            # Run the pipeline
+            result = await pipeline.run(apply_url)
+
+        finally:
+            if keep_browser_open:
+                logger.info("[TEST] Keeping browser open for debugging. You must close it manually.")
+            else:
                 if browser:
                     await browser.close()
-                if temp_resume_path:
-                    cleanup_temp_file(temp_resume_path)
-                if temp_cover_letter_path:
-                    cleanup_temp_file(temp_cover_letter_path)
+                await p.stop()
+            if temp_resume_path:
+                cleanup_temp_file(temp_resume_path)
+            if temp_cover_letter_path:
+                cleanup_temp_file(temp_cover_letter_path)
 
         return {
             "success": result.success,
