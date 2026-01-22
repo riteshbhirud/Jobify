@@ -1050,3 +1050,212 @@ async def get_user_sessions(user_id: str) -> list:
     except Exception as e:
         logger.error(f"Error fetching user sessions: {e}")
         return []
+
+
+# ============================================================================
+# Test Pipeline (Direct URL without DB records)
+# ============================================================================
+
+async def run_test_pipeline(
+    user_id: str,
+    apply_url: str,
+    job_title: Optional[str] = None,
+    company: Optional[str] = None,
+    dry_run: bool = True,
+    use_browserbase: bool = False,
+    headless: bool = True,
+    generate_cover_letter_flag: bool = False
+) -> Dict[str, Any]:
+    """
+    Run automation pipeline directly from a URL for testing purposes.
+    Does NOT create or update any database records (jobs/applications).
+
+    Args:
+        user_id: The user's ID (to fetch profile from DB)
+        apply_url: Direct URL to the job application page
+        job_title: Optional job title (for cover letter generation)
+        company: Optional company name (for cover letter generation)
+        dry_run: If True, fill form but don't submit (defaults to True for safety)
+        use_browserbase: If True, use BrowserBase cloud browsers
+        headless: If True and not using BrowserBase, run local browser in headless mode
+        generate_cover_letter_flag: If True, generate tailored cover letter
+
+    Returns:
+        Dict with result information
+    """
+    supabase = get_supabase()
+    browserbase_session = None
+    temp_cover_letter_path = None
+    temp_resume_path = None
+
+    try:
+        # Detect ATS platform
+        platform = detect_ats_platform(apply_url)
+        if not platform:
+            raise ValueError(f"Unsupported ATS platform for URL: {apply_url}. Supported: {', '.join(ATS_DOMAINS.keys())}")
+
+        logger.info(f"[TEST] Detected ATS platform: {platform} for URL: {apply_url}")
+
+        # Get pipeline class
+        pipeline_class = get_pipeline_class(platform)
+        if not pipeline_class:
+            raise ValueError(f"Pipeline not available for platform: {platform}")
+
+        # Fetch user data
+        user_result = supabase.table("users").select("*").eq("id", user_id).single().execute()
+        if not user_result.data:
+            raise ValueError(f"User {user_id} not found")
+        user = user_result.data
+
+        # Build user profile
+        user_profile = build_user_profile(user)
+
+        # Build minimal job info (not from DB)
+        job_info = {
+            "id": None,
+            "title": job_title or "Test Position",
+            "company": company or "Test Company",
+            "location": "",
+            "description": "",
+            "apply_url": apply_url,
+            "source": "test",
+            "employment_type": "",
+            "experience_level": "",
+            "remote_type": "",
+            "salary_min": None,
+            "salary_max": None,
+        }
+
+        # Download resume from Supabase Storage
+        resume_url = user.get("resume_url")
+        resume_path = None
+
+        if resume_url:
+            temp_resume_path, download_success = download_resume_from_storage(
+                resume_url=resume_url,
+                user_id=user_id
+            )
+            if download_success:
+                resume_path = temp_resume_path
+            else:
+                logger.warning(f"[TEST] Could not download resume for user {user_id}")
+
+        if not resume_path:
+            raise ValueError(f"Resume is required but could not be obtained for user {user_id}")
+
+        if not os.path.exists(resume_path) or os.path.getsize(resume_path) == 0:
+            raise ValueError(f"Downloaded resume file is invalid or empty: {resume_path}")
+
+        # Generate cover letter if enabled
+        cover_letter_path = None
+        if generate_cover_letter_flag:
+            logger.info(f"[TEST] Generating cover letter for {job_info['title']} at {job_info['company']}...")
+
+            cover_letter_text, cl_success = await generate_cover_letter(
+                user_profile=user_profile,
+                job_info=job_info
+            )
+
+            if cl_success and cover_letter_text:
+                temp_cover_letter_path, save_success = save_cover_letter_to_temp(
+                    cover_letter_text=cover_letter_text,
+                    user_id=user_id
+                )
+                if save_success:
+                    cover_letter_path = temp_cover_letter_path
+                    logger.info(f"[TEST] Cover letter ready: {cover_letter_path}")
+
+        # Run the pipeline
+        async with async_playwright() as p:
+            browser = None
+            context = None
+            page = None
+
+            try:
+                if use_browserbase:
+                    browserbase_session = await create_browserbase_session()
+
+                    if browserbase_session:
+                        logger.info(f"[TEST] Connecting to BrowserBase session: {browserbase_session['id']}")
+                        browser = await p.chromium.connect_over_cdp(browserbase_session["connect_url"])
+                        context = browser.contexts[0]
+                        page = context.pages[0] if context.pages else await context.new_page()
+                        logger.info("[TEST] Successfully connected to BrowserBase")
+                    else:
+                        logger.warning("[TEST] BrowserBase not available, falling back to local browser")
+                        use_browserbase = False
+
+                if not use_browserbase or not browser:
+                    logger.info(f"[TEST] Using local Chromium browser (headless={headless})")
+                    browser = await p.chromium.launch(
+                        headless=headless,
+                        slow_mo=100
+                    )
+                    context = await browser.new_context(
+                        viewport={"width": 1920, "height": 1080},
+                        user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                    )
+                    page = await context.new_page()
+
+                # Create pipeline instance
+                pipeline = pipeline_class(
+                    page=page,
+                    user_profile=user_profile,
+                    job_info=job_info,
+                    resume_path=resume_path,
+                    cover_letter_path=cover_letter_path,
+                    dry_run=dry_run
+                )
+
+                # Run the pipeline
+                result = await pipeline.run(apply_url)
+
+            finally:
+                if browser:
+                    await browser.close()
+                if temp_resume_path:
+                    cleanup_temp_file(temp_resume_path)
+                if temp_cover_letter_path:
+                    cleanup_temp_file(temp_cover_letter_path)
+
+        return {
+            "success": result.success,
+            "status": result.status,
+            "error": result.error,
+            "confirmation_number": result.confirmation_number,
+            "screenshot_path": result.screenshot_path,
+            "ai_calls_made": result.ai_calls_made,
+            "answers_used": result.answers_used,
+            "platform": platform,
+            "used_browserbase": use_browserbase and browserbase_session is not None,
+            "browserbase_session_id": browserbase_session["id"] if browserbase_session else None,
+            "dry_run": dry_run,
+            "improvement_logs": [
+                {
+                    "question": log.question,
+                    "field_type": log.field_type,
+                    "options": log.options,
+                    "reason": log.reason,
+                }
+                for log in result.improvement_logs
+            ] if result.improvement_logs else []
+        }
+
+    except Exception as e:
+        logger.error(f"[TEST] Pipeline error: {e}")
+
+        # Clean up temp files
+        if temp_resume_path:
+            cleanup_temp_file(temp_resume_path)
+        if temp_cover_letter_path:
+            cleanup_temp_file(temp_cover_letter_path)
+
+        return {
+            "success": False,
+            "status": "failed",
+            "error": str(e),
+            "platform": detect_ats_platform(apply_url),
+            "used_browserbase": browserbase_session is not None,
+            "browserbase_session_id": browserbase_session["id"] if browserbase_session else None,
+            "dry_run": dry_run
+        }

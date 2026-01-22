@@ -14,6 +14,7 @@ import logging
 from app.database import get_supabase
 from app.services.automation_service import (
     run_application_pipeline,
+    run_test_pipeline,
     process_queued_applications,
     detect_ats_platform,
     is_browserbase_configured,
@@ -517,3 +518,100 @@ async def retry_application(
         "attempt": app["attempt_count"] + 1,
         "max_attempts": app["max_attempts"]
     }
+
+
+@router.post("/test-url")
+async def test_url_automation(
+    background_tasks: BackgroundTasks,
+    user_id: str = Query(..., description="User ID to use for profile data"),
+    apply_url: str = Query(..., description="Direct URL to the job application page"),
+    job_title: Optional[str] = Query(None, description="Job title (optional, for cover letter)"),
+    company: Optional[str] = Query(None, description="Company name (optional, for cover letter)"),
+    dry_run: bool = Query(True, description="Fill form but don't submit (default: True for safety)"),
+    use_browserbase: bool = Query(False, description="Use BrowserBase cloud browsers (default: False for local)"),
+    headless: bool = Query(True, description="Run browser in headless mode (only for local browser)"),
+    generate_cover_letter: bool = Query(False, description="Generate tailored cover letter"),
+    run_async: bool = Query(False, description="Run in background (default: False for immediate result)")
+):
+    """
+    Test automation with a direct URL without creating database records.
+
+    This endpoint is for testing purposes - it runs the automation pipeline
+    directly on a provided URL using the user's profile, but does NOT:
+    - Create a job record in the database
+    - Create an application record in the database
+    - Track the application status
+
+    Useful for:
+    - Testing automation on specific job URLs
+    - Debugging ATS-specific issues
+    - Verifying user profile data works correctly
+
+    By default uses local Chromium (use_browserbase=false) and dry_run=true for safety.
+    """
+    # Validate URL is supported
+    platform = detect_ats_platform(apply_url)
+    if not platform:
+        supported = ", ".join(ATS_DOMAINS.keys())
+        raise HTTPException(
+            status_code=400,
+            detail=f"URL is not from a supported ATS platform. Supported domains: {supported}"
+        )
+
+    # Verify user exists
+    supabase = get_supabase()
+    user_result = supabase.table("users").select("id, first_name, last_name, resume_url").eq("id", user_id).single().execute()
+    if not user_result.data:
+        raise HTTPException(status_code=404, detail=f"User {user_id} not found")
+
+    user = user_result.data
+    if not user.get("resume_url"):
+        raise HTTPException(status_code=400, detail="User does not have a resume uploaded")
+
+    browserbase_available = is_browserbase_configured()
+    will_use_browserbase = use_browserbase and browserbase_available
+
+    if run_async:
+        # Run in background
+        background_tasks.add_task(
+            run_test_pipeline,
+            user_id=user_id,
+            apply_url=apply_url,
+            job_title=job_title,
+            company=company,
+            dry_run=dry_run,
+            use_browserbase=use_browserbase,
+            headless=headless,
+            generate_cover_letter_flag=generate_cover_letter
+        )
+
+        return {
+            "success": True,
+            "message": f"Test automation started in background for {platform} URL",
+            "status": "processing",
+            "platform": platform,
+            "user": f"{user.get('first_name', '')} {user.get('last_name', '')}".strip(),
+            "apply_url": apply_url,
+            "using_browserbase": will_use_browserbase,
+            "dry_run": dry_run
+        }
+    else:
+        # Run synchronously and return result
+        result = await run_test_pipeline(
+            user_id=user_id,
+            apply_url=apply_url,
+            job_title=job_title,
+            company=company,
+            dry_run=dry_run,
+            use_browserbase=use_browserbase,
+            headless=headless,
+            generate_cover_letter_flag=generate_cover_letter
+        )
+
+        return {
+            "success": result["success"],
+            "platform": platform,
+            "user": f"{user.get('first_name', '')} {user.get('last_name', '')}".strip(),
+            "apply_url": apply_url,
+            "result": result
+        }
