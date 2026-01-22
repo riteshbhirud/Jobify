@@ -74,7 +74,13 @@ class AIAnswerer:
             if self._word_similarity(question_lower, stored_lower) > 0.7:
                 return stored_a
 
-        # 3. Check pattern-based rules
+        # 2.5. For checkbox (multi-select), ALWAYS use AI - skip pattern matching
+        # Checkboxes need AI to pick multiple relevant options from the user's profile
+        if options and field_type == "checkbox":
+            print(f"    [AI] Using OpenAI for checkbox multi-select: {question[:50]}...")
+            return self._generate_checkbox_answer(question, options)
+
+        # 3. Check pattern-based rules (skip for checkbox - handled above)
         pattern_answer = self._check_patterns(question_lower, options)
         if pattern_answer is not None:
             return pattern_answer
@@ -1320,6 +1326,70 @@ Provide ONLY the answer, nothing else:"""
 
         except Exception as e:
             print(f"  [AI] Error generating answer: {e}")
+            return None
+
+    def _generate_checkbox_answer(
+        self,
+        question: str,
+        options: List[str]
+    ) -> Optional[str]:
+        """Generate answer for checkbox multi-select questions using OpenAI.
+
+        Returns comma-separated list of options to select based on user profile.
+        """
+        if not client:
+            print("  [AI] OpenAI client not configured, skipping checkbox AI generation")
+            return None
+
+        print(f"  [AI] Generating checkbox answer for: {question[:50]}...")
+        self._api_calls_made += 1
+
+        profile_summary = self._format_profile_for_prompt()
+        job_summary = self._format_job_for_prompt()
+
+        system_prompt = """You are helping a job candidate fill out a job application.
+For this checkbox question (select all that apply), pick ALL options that best match the candidate's profile and interests.
+
+RULES:
+- Select options that align with the candidate's skills, experience, and stated interests
+- It's okay to select multiple options (this is a multi-select question)
+- Only select options the candidate would genuinely be interested in or qualified for
+- Return EXACTLY the option text as shown, separated by commas
+- Do NOT add options that aren't in the list"""
+
+        user_prompt = f"""CANDIDATE PROFILE:
+{profile_summary}
+
+{job_summary}
+
+QUESTION: {question}
+
+AVAILABLE OPTIONS (select all that apply):
+{chr(10).join(f'- {opt}' for opt in options if opt and opt.strip())}
+
+Based on the candidate's profile, which options should they select?
+Return ONLY the exact option texts, separated by commas (e.g., "Backend, Machine Learning, Data Science"):"""
+
+        try:
+            response = client.chat.completions.create(
+                model=OPENAI_MODEL,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=0.3,  # Lower temperature for more consistent selection
+                max_tokens=200
+            )
+
+            answer = response.choices[0].message.content.strip()
+            # Remove quotes if present
+            answer = answer.strip('"\'')
+
+            print(f"  [AI] Checkbox answer: {answer}")
+            return answer
+
+        except Exception as e:
+            print(f"  [AI] Error generating checkbox answer: {e}")
             return None
 
     def _format_profile_for_prompt(self) -> str:

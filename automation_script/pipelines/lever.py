@@ -446,14 +446,20 @@ class LeverPipeline(BasePipeline):
 
             if not answer:
                 if is_required:
+                    try:
+                        html_context = await question_element.evaluate("el => el.outerHTML")
+                    except Exception:
+                        html_context = ""
                     self.log_unhandled_field(
                         question=question_text,
                         field_type="checkbox",
                         options=option_labels,
                         reason="AI returned no answer",
+                        html_context=html_context,
                         is_required=True
                     )
                     print(f"    [WARN] No answer for required checkbox: {question_text[:40]}")
+                    print(f"    [DEBUG HTML] {html_context[:500]}..." if html_context else "    [DEBUG HTML] Could not capture")
                 return
 
             # Parse AI answer - could be comma-separated or a single value
@@ -496,14 +502,20 @@ class LeverPipeline(BasePipeline):
             if selected_count > 0:
                 self.answers_used[question_text[:50]] = answer
             elif is_required:
+                try:
+                    html_context = await question_element.evaluate("el => el.outerHTML")
+                except Exception:
+                    html_context = ""
                 self.log_unhandled_field(
                     question=question_text,
                     field_type="checkbox",
                     options=option_labels,
                     reason=f"AI answer '{answer}' didn't match any option",
+                    html_context=html_context,
                     is_required=True
                 )
                 print(f"    [WARN] No checkboxes matched AI answer: {answer[:50]}")
+                print(f"    [DEBUG HTML] {html_context[:500]}..." if html_context else "    [DEBUG HTML] Could not capture")
 
         except Exception as e:
             print(f"    [ERROR] Checkbox question failed: {e}")

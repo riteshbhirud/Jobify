@@ -6,10 +6,13 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
-
 # Paths
 BASE_DIR = Path(__file__).parent.parent
+BACKEND_DIR = BASE_DIR.parent / "backend"
+
+# Load .env from multiple locations (automation_script/.env and backend/.env)
+load_dotenv(BASE_DIR / ".env")
+load_dotenv(BACKEND_DIR / ".env")
 DATA_DIR = BASE_DIR / "data"
 PROFILES_DIR = DATA_DIR / "sample_profiles"
 RESUMES_DIR = DATA_DIR / "resumes"
