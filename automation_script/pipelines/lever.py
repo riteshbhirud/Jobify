@@ -132,23 +132,26 @@ class LeverPipeline(BasePipeline):
         phone = self.profile.get('phone', '')
         await self._fill_input('input[name="phone"]', phone, "Phone")
 
-        # Current location (optional)
+        # Current location (optional) - try multiple selectors
         address = self.profile.get('address', {})
         city = address.get('city', '')
         state = address.get('state', '')
         location = f"{city}, {state}" if city and state else city or state
         if location:
-            await self._fill_input('input[name="location"], input#location-input', location, "Location")
+            # Try the location input - Lever uses different selectors
+            filled = await self._fill_input('input#location-input', location, "Location")
+            if not filled:
+                await self._fill_input('input[name="location"]', location, "Location")
 
         # Current company (optional)
         company = self.profile.get('current_company', '')
         if company:
             await self._fill_input('input[name="org"]', company, "Current company")
 
-    async def _fill_input(self, selector: str, value: str, field_name: str):
-        """Fill a text input field, clearing any autofilled content first"""
+    async def _fill_input(self, selector: str, value: str, field_name: str) -> bool:
+        """Fill a text input field, clearing any autofilled content first. Returns True if successful."""
         if not value:
-            return
+            return False
 
         try:
             element = await self.page.query_selector(selector)
@@ -174,8 +177,12 @@ class LeverPipeline(BasePipeline):
                 print(f"  [OK] {field_name}: {value[:50]}{'...' if len(value) > 50 else ''}")
                 self.answers_used[field_name] = value
                 await self.human.random_delay(0.2, 0.4)
+                return True
+            else:
+                return False
         except Exception as e:
             print(f"  [ERROR] {field_name}: {e}")
+            return False
 
     async def _fill_links(self):
         """Fill social/professional links"""
@@ -223,17 +230,29 @@ class LeverPipeline(BasePipeline):
         except:
             pass
 
-        # Find all custom question sections (cards)
+        # First try the card-based structure (some Lever forms use this)
         cards = await self.page.query_selector_all('div[data-qa="additional-cards"]')
+        print(f"  [DEBUG] Found {len(cards) if cards else 0} additional-cards divs")
 
-        for card in cards:
-            card_name = await card.query_selector('h4[data-qa="card-name"]')
-            if card_name:
-                name_text = await card_name.inner_text()
-                print(f"\n  [CARD] {name_text}")
+        if cards:
+            for card in cards:
+                card_name = await card.query_selector('h4[data-qa="card-name"]')
+                if card_name:
+                    name_text = await card_name.inner_text()
+                    print(f"\n  [CARD] {name_text}")
 
-            # Handle all questions in this card
-            questions = await card.query_selector_all('li.application-question.custom-question')
+                # Handle all questions in this card
+                questions = await card.query_selector_all('li.application-question.custom-question')
+                print(f"  [DEBUG] Found {len(questions) if questions else 0} questions in card")
+
+                for question in questions:
+                    await self._handle_custom_question(question)
+        else:
+            # Fallback: Find all custom questions directly in the form (flat structure)
+            # This handles Lever forms without the card wrapper
+            print("  [INFO] Using flat question structure")
+            questions = await self.page.query_selector_all('li.application-question.custom-question')
+            print(f"  [DEBUG] Found {len(questions) if questions else 0} flat custom questions")
 
             for question in questions:
                 await self._handle_custom_question(question)
@@ -241,13 +260,16 @@ class LeverPipeline(BasePipeline):
     async def _handle_custom_question(self, question_element):
         """Handle a single custom question"""
         try:
-            # Get question text
+            # Get question text from label
             label_el = await question_element.query_selector('.application-label .text, .application-label')
             if not label_el:
                 return
 
             question_text = await label_el.inner_text()
-            question_text = question_text.replace('✱', '').strip()
+            # Clean up the question text - remove required marker and extra whitespace
+            question_text = question_text.replace('✱', '').replace('\n', ' ').strip()
+            # Remove duplicate spaces
+            question_text = ' '.join(question_text.split())
 
             # Check if required
             required_span = await question_element.query_selector('.required')
@@ -255,29 +277,46 @@ class LeverPipeline(BasePipeline):
 
             print(f"    Question: {question_text[:60]}{'...' if len(question_text) > 60 else ''}")
 
-            # Check for multiple choice (radio buttons)
-            radio_container = await question_element.query_selector('[data-qa="multiple-choice"], ul')
-            if radio_container:
+            # IMPORTANT: Check for dropdown/select FIRST before checking for ul
+            # because some questions have a ul wrapper but contain a select inside
+            select = await question_element.query_selector('select')
+            if select:
+                print(f"    [DEBUG] Found select element")
+                await self._handle_select_question(select, question_text, is_required)
+                return
+
+            # Check for checkboxes (multi-select questions like "check all that apply")
+            checkbox_inputs = await question_element.query_selector_all('input[type="checkbox"]')
+            if checkbox_inputs and len(checkbox_inputs) > 0:
+                print(f"    [DEBUG] Found {len(checkbox_inputs)} checkbox inputs")
+                await self._handle_checkbox_question(question_element, question_text, is_required)
+                return
+
+            # Check for multiple choice (radio buttons) - only if there are actual radio inputs
+            radio_inputs = await question_element.query_selector_all('input[type="radio"]')
+            if radio_inputs and len(radio_inputs) > 0:
+                print(f"    [DEBUG] Found {len(radio_inputs)} radio inputs")
                 await self._handle_radio_question(question_element, question_text, is_required)
                 return
 
             # Check for text input
             text_input = await question_element.query_selector('input[type="text"]')
             if text_input:
+                print(f"    [DEBUG] Found text input")
                 await self._handle_text_question(text_input, question_text, is_required)
                 return
 
             # Check for textarea
             textarea = await question_element.query_selector('textarea')
             if textarea:
+                print(f"    [DEBUG] Found textarea")
                 await self._handle_textarea_question(textarea, question_text, is_required)
                 return
 
-            # Check for dropdown/select
-            select = await question_element.query_selector('select')
-            if select:
-                await self._handle_select_question(select, question_text, is_required)
-                return
+            # Debug: print what we found
+            inner_html = await question_element.inner_html()
+            print(f"    [SKIP] Unknown field type for: {question_text[:40]}")
+            print(f"    [DEBUG] Inner HTML snippet: {inner_html[:200]}...")
 
         except Exception as e:
             print(f"    [ERROR] Question handling failed: {e}")
@@ -305,51 +344,169 @@ class LeverPipeline(BasePipeline):
                 options=option_values
             )
 
-            if answer:
-                # Find and click the matching radio button
-                for opt in options:
-                    value = await opt.get_attribute('value')
-                    if value and value.lower() == answer.lower():
-                        # Click the label or the radio itself (force=True to bypass overlays)
-                        parent_label = await opt.evaluate_handle('el => el.closest("label")')
-                        if parent_label:
-                            await parent_label.as_element().click(force=True)
-                        else:
-                            await opt.click(force=True)
+            # Handle None answer
+            if not answer:
+                if is_required:
+                    self.log_unhandled_field(
+                        question=question_text,
+                        field_type="radio",
+                        options=option_values,
+                        reason="AI returned no answer",
+                        is_required=True
+                    )
+                    print(f"    [WARN] No answer for required radio: {question_text[:40]}")
+                return
 
-                        print(f"    [OK] Selected: {answer}")
-                        self.answers_used[question_text[:50]] = answer
-                        await self.human.random_delay(0.2, 0.4)
-                        return
+            answer_lower = answer.lower()
 
-                # If exact match not found, try the first matching option
-                for opt in options:
-                    value = await opt.get_attribute('value')
-                    if value and answer.lower() in value.lower():
-                        parent_label = await opt.evaluate_handle('el => el.closest("label")')
-                        if parent_label:
-                            await parent_label.as_element().click(force=True)
-                        else:
-                            await opt.click(force=True)
+            # Find and click the matching radio button
+            for opt in options:
+                value = await opt.get_attribute('value')
+                if value and value.lower() == answer_lower:
+                    # Click the label or the radio itself (force=True to bypass overlays)
+                    parent_label = await opt.evaluate_handle('el => el.closest("label")')
+                    if parent_label:
+                        await parent_label.as_element().click(force=True)
+                    else:
+                        await opt.click(force=True)
 
-                        print(f"    [OK] Selected (partial match): {value}")
-                        self.answers_used[question_text[:50]] = value
-                        await self.human.random_delay(0.2, 0.4)
-                        return
+                    print(f"    [OK] Selected: {answer}")
+                    self.answers_used[question_text[:50]] = answer
+                    await self.human.random_delay(0.2, 0.4)
+                    return
 
-            # If no answer and required, log for improvement
+            # If exact match not found, try partial matching
+            for opt in options:
+                value = await opt.get_attribute('value')
+                if value and answer_lower in value.lower():
+                    parent_label = await opt.evaluate_handle('el => el.closest("label")')
+                    if parent_label:
+                        await parent_label.as_element().click(force=True)
+                    else:
+                        await opt.click(force=True)
+
+                    print(f"    [OK] Selected (partial match): {value}")
+                    self.answers_used[question_text[:50]] = value
+                    await self.human.random_delay(0.2, 0.4)
+                    return
+
+            # If still no match found, log it
             if is_required:
                 self.log_unhandled_field(
                     question=question_text,
                     field_type="radio",
                     options=option_values,
-                    reason="No matching answer from AI",
+                    reason=f"AI answer '{answer}' didn't match any option",
                     is_required=True
                 )
-                print(f"    [WARN] No answer for required radio: {question_text[:40]}")
+                print(f"    [WARN] Answer '{answer}' didn't match options: {option_values[:3]}")
 
         except Exception as e:
             print(f"    [ERROR] Radio question failed: {e}")
+
+    async def _handle_checkbox_question(self, question_element, question_text: str, is_required: bool):
+        """Handle a checkbox question (multi-select, like 'check all that apply')"""
+        try:
+            # Get all checkbox options with their labels
+            checkboxes = await question_element.query_selector_all('input[type="checkbox"]')
+            option_data = []  # List of (checkbox_element, value, label_text)
+
+            for checkbox in checkboxes:
+                value = await checkbox.get_attribute('value')
+                # Try to get label text from sibling span or parent label
+                parent_label = await checkbox.evaluate_handle('el => el.closest("label")')
+                label_text = value  # Default to value
+
+                if parent_label:
+                    label_el = parent_label.as_element()
+                    span = await label_el.query_selector('span')
+                    if span:
+                        label_text = (await span.inner_text()).strip()
+                    else:
+                        full_text = (await label_el.inner_text()).strip()
+                        if full_text:
+                            label_text = full_text
+
+                if value:
+                    option_data.append((checkbox, value, label_text))
+
+            if not option_data:
+                print(f"    [SKIP] No checkbox options found")
+                return
+
+            # Extract labels for AI
+            option_labels = [label for _, _, label in option_data]
+
+            # Ask AI which options to select (can be multiple)
+            answer = self.ai.get_answer(
+                question=question_text + " (Select all that apply. Return comma-separated values.)",
+                field_type="checkbox",
+                options=option_labels
+            )
+
+            if not answer:
+                if is_required:
+                    self.log_unhandled_field(
+                        question=question_text,
+                        field_type="checkbox",
+                        options=option_labels,
+                        reason="AI returned no answer",
+                        is_required=True
+                    )
+                    print(f"    [WARN] No answer for required checkbox: {question_text[:40]}")
+                return
+
+            # Parse AI answer - could be comma-separated or a single value
+            selected_answers = [a.strip().lower() for a in answer.split(',') if a.strip()]
+            selected_count = 0
+            print(f"    [DEBUG] AI answer: {answer}, parsed: {selected_answers}")
+            print(f"    [DEBUG] Available options: {[label for _, _, label in option_data]}")
+
+            for checkbox, value, label_text in option_data:
+                value_lower = (value or "").lower()
+                label_lower = (label_text or "").lower()
+
+                # Check if this option should be selected
+                should_select = False
+                for ans in selected_answers:
+                    if ans == value_lower or ans == label_lower:
+                        should_select = True
+                        break
+                    if ans in value_lower or ans in label_lower:
+                        should_select = True
+                        break
+                    if value_lower in ans or label_lower in ans:
+                        should_select = True
+                        break
+
+                if should_select:
+                    # Check if already checked
+                    is_checked = await checkbox.is_checked()
+                    if not is_checked:
+                        # Click the label or checkbox
+                        parent_label = await checkbox.evaluate_handle('el => el.closest("label")')
+                        if parent_label:
+                            await parent_label.as_element().click(force=True)
+                        else:
+                            await checkbox.click(force=True)
+                        selected_count += 1
+                        print(f"    [OK] Checked: {label_text}")
+                        await self.human.random_delay(0.1, 0.3)
+
+            if selected_count > 0:
+                self.answers_used[question_text[:50]] = answer
+            elif is_required:
+                self.log_unhandled_field(
+                    question=question_text,
+                    field_type="checkbox",
+                    options=option_labels,
+                    reason=f"AI answer '{answer}' didn't match any option",
+                    is_required=True
+                )
+                print(f"    [WARN] No checkboxes matched AI answer: {answer[:50]}")
+
+        except Exception as e:
+            print(f"    [ERROR] Checkbox question failed: {e}")
 
     async def _handle_text_question(self, input_element, question_text: str, is_required: bool):
         """Handle a text input question"""
@@ -407,38 +564,84 @@ class LeverPipeline(BasePipeline):
     async def _handle_select_question(self, select_element, question_text: str, is_required: bool):
         """Handle a dropdown/select question"""
         try:
-            # Get all options
+            # Get all options with both value and text
             options = await select_element.query_selector_all('option')
-            option_values = []
+            option_data = []  # List of (value, text) tuples
 
             for opt in options:
                 value = await opt.get_attribute('value')
-                text = await opt.inner_text()
-                if value and value.strip():  # Skip empty/placeholder options
-                    option_values.append(text.strip())
+                text = (await opt.inner_text()).strip()
+                # Skip empty/placeholder options (empty value or "Select..." type text)
+                if value and value.strip() and text and not text.lower().startswith('select'):
+                    option_data.append((value, text))
 
-            if not option_values:
+            if not option_data:
+                print(f"    [SKIP] No valid options found for: {question_text[:40]}")
                 return
+
+            # Extract just the display text for AI
+            option_texts = [text for _, text in option_data]
+            print(f"    [DEBUG] Select options: {option_texts[:5]}{'...' if len(option_texts) > 5 else ''}")
 
             answer = self.ai.get_answer(
                 question=question_text,
                 field_type="select",
-                options=option_values
+                options=option_texts
             )
+            print(f"    [DEBUG] AI answer for select: {answer}")
 
-            if answer:
-                await select_element.select_option(label=answer)
-                print(f"    [OK] Selected: {answer}")
-                self.answers_used[question_text[:50]] = answer
-                await self.human.random_delay(0.2, 0.4)
-            elif is_required:
+            # Handle None answer
+            if not answer:
+                if is_required:
+                    self.log_unhandled_field(
+                        question=question_text,
+                        field_type="select",
+                        options=option_texts,
+                        reason="AI returned no answer",
+                        is_required=True
+                    )
+                    print(f"    [WARN] No answer for required select: {question_text[:40]}")
+                return
+
+            answer_lower = answer.lower()
+
+            # Try exact match on text first
+            for value, text in option_data:
+                if text and text.lower() == answer_lower:
+                    await select_element.select_option(value=value)
+                    print(f"    [OK] Selected: {text}")
+                    self.answers_used[question_text[:50]] = text
+                    await self.human.random_delay(0.2, 0.4)
+                    return
+
+            # Try partial match on text
+            for value, text in option_data:
+                if text and (answer_lower in text.lower() or text.lower() in answer_lower):
+                    await select_element.select_option(value=value)
+                    print(f"    [OK] Selected (partial match): {text}")
+                    self.answers_used[question_text[:50]] = text
+                    await self.human.random_delay(0.2, 0.4)
+                    return
+
+            # Try matching by value attribute
+            for value, text in option_data:
+                if value and value.lower() == answer_lower:
+                    await select_element.select_option(value=value)
+                    print(f"    [OK] Selected (by value): {text}")
+                    self.answers_used[question_text[:50]] = text
+                    await self.human.random_delay(0.2, 0.4)
+                    return
+
+            # If still no match, log it
+            if is_required:
                 self.log_unhandled_field(
                     question=question_text,
                     field_type="select",
-                    options=option_values,
-                    reason="No matching answer from AI",
+                    options=option_texts,
+                    reason=f"AI answer '{answer}' didn't match any option",
                     is_required=True
                 )
+                print(f"    [WARN] Answer '{answer}' didn't match options: {option_texts[:3]}")
 
         except Exception as e:
             print(f"    [ERROR] Select question failed: {e}")

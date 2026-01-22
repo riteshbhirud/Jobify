@@ -208,6 +208,8 @@ class AIAnswerer:
                 # For dropdowns with consent options
                 if options:
                     for opt in options:
+                        if not opt:
+                            continue
                         opt_lower = opt.lower()
                         if "i consent" in opt_lower or "consent" in opt_lower:
                             return opt
@@ -251,8 +253,10 @@ class AIAnswerer:
                 if match:
                     return match
                 # Handle Man <-> Male and Woman <-> Female mappings
-                gender_lower = gender.lower()
+                gender_lower = gender.lower() if gender else ""
                 for opt in options:
+                    if not opt:
+                        continue
                     opt_lower = opt.lower().strip()
                     if gender_lower == "man" and opt_lower == "male":
                         return opt
@@ -264,6 +268,8 @@ class AIAnswerer:
                         return opt
                 # Look for decline option as fallback
                 for opt in options:
+                    if not opt:
+                        continue
                     opt_lower = opt.lower()
                     if "decline" in opt_lower or "prefer not" in opt_lower or "self-identify" in opt_lower:
                         return opt
@@ -303,6 +309,8 @@ class AIAnswerer:
                 if is_citizen:
                     # Look for "I am currently a U.S. Person" or similar
                     for opt in options:
+                        if not opt:
+                            continue
                         opt_lower = opt.lower()
                         if "currently" in opt_lower and "u.s. person" in opt_lower:
                             return opt
@@ -310,12 +318,16 @@ class AIAnswerer:
                             return opt
                     # Fallback to first option that mentions being a U.S. Person
                     for opt in options:
+                        if not opt:
+                            continue
                         opt_lower = opt.lower()
                         if "u.s. person" in opt_lower and "not" not in opt_lower:
                             return opt
                 else:
                     # Not a U.S. citizen - look for "will become" or "eligible for licensing"
                     for opt in options:
+                        if not opt:
+                            continue
                         opt_lower = opt.lower()
                         if "will" in opt_lower and "become" in opt_lower:
                             return opt
@@ -415,14 +427,14 @@ class AIAnswerer:
                     return no_opt
                 # Try to find N/A or None option as fallback
                 for opt in options:
-                    if opt.lower().strip() in ["n/a", "na", "none", "no"]:
+                    if opt and opt.lower().strip() in ["n/a", "na", "none", "no"]:
                         return opt
             return "No"
 
         # Preferred location -> choose first option or any available
         if "preferred location" in question_lower or "location preference" in question_lower:
             if options:
-                valid_options = [opt for opt in options if opt.strip() and
+                valid_options = [opt for opt in options if opt and opt.strip() and
                                opt.lower() not in ['select', 'choose', '--', '', 'select...', 'select one']]
                 if valid_options:
                     return valid_options[0]
@@ -442,11 +454,13 @@ class AIAnswerer:
             if options:
                 # Try to find "Company Website" or similar
                 for opt in options:
+                    if not opt:
+                        continue
                     opt_lower = opt.lower()
                     if "company website" in opt_lower or "website" in opt_lower or "career" in opt_lower:
                         return opt
                 # Fallback to first valid option
-                valid_options = [opt for opt in options if opt.strip() and
+                valid_options = [opt for opt in options if opt and opt.strip() and
                                opt.lower() not in ['select', 'choose', '--', '', 'select...', 'select one']]
                 if valid_options:
                     return valid_options[0]
@@ -468,6 +482,8 @@ class AIAnswerer:
                     return match
                 # Look for "None" or "No Clearance" options
                 for opt in options:
+                    if not opt:
+                        continue
                     opt_lower = opt.lower()
                     if "none" in opt_lower or "no clearance" in opt_lower or "n/a" in opt_lower:
                         return opt
@@ -484,10 +500,10 @@ class AIAnswerer:
                 # Default to June for graduation month
                 if options:
                     for opt in options:
-                        if opt.lower() == "june":
+                        if opt and opt.lower() == "june":
                             return opt
                     # If June not in options, return first valid option
-                    valid_opts = [o for o in options if o.strip() and o.lower() not in ['select', 'choose', '--', '']]
+                    valid_opts = [o for o in options if o and o.strip() and o.lower() not in ['select', 'choose', '--', '']]
                     if valid_opts:
                         return valid_opts[0]
                 return "June"
@@ -499,16 +515,18 @@ class AIAnswerer:
                 # Default to September for start month (common academic start)
                 if options:
                     for opt in options:
-                        if opt.lower() == "september":
+                        if opt and opt.lower() == "september":
                             return opt
-                    valid_opts = [o for o in options if o.strip() and o.lower() not in ['select', 'choose', '--', '']]
+                    valid_opts = [o for o in options if o and o.strip() and o.lower() not in ['select', 'choose', '--', '']]
                     if valid_opts:
                         return valid_opts[0]
                 return "September"
 
         # Graduation year -> use education from profile
-        # Matches: "What is your expected graduation year?", "Graduation year", "When do you graduate?", etc.
+        # Matches: "What is your expected graduation year?", "Graduation year", "When do you graduate?",
+        # "Year of graduation", etc.
         if ("graduation" in question_lower and ("year" in question_lower or "date" in question_lower)) or \
+           ("year" in question_lower and "graduation" in question_lower) or \
            "when is/was your graduation" in question_lower or \
            "expected graduation" in question_lower or \
            "when do you graduate" in question_lower or \
@@ -548,8 +566,10 @@ class AIAnswerer:
                     if match:
                         return match
                     # Try partial matches for common degree types
-                    degree_lower = degree.lower()
+                    degree_lower = degree.lower() if degree else ""
                     for opt in options:
+                        if not opt:
+                            continue
                         opt_lower = opt.lower()
                         if "master" in degree_lower and "master" in opt_lower:
                             return opt
@@ -579,8 +599,10 @@ class AIAnswerer:
                     if match:
                         return match
                     # Try partial matches for common degree types
-                    degree_lower = degree.lower()
+                    degree_lower = degree.lower() if degree else ""
                     for opt in options:
+                        if not opt:
+                            continue
                         opt_lower = opt.lower()
                         # Master's degree variations
                         if "master" in degree_lower:
@@ -599,7 +621,7 @@ class AIAnswerer:
                             if "associate" in opt_lower or "aa" == opt_lower.strip() or "as" == opt_lower.strip():
                                 return opt
                     # Return first valid option if no match
-                    valid_opts = [o for o in options if o.strip() and o.lower() not in ['select', 'choose', '--', '', 'select...']]
+                    valid_opts = [o for o in options if o and o.strip() and o.lower() not in ['select', 'choose', '--', '', 'select...']]
                     if valid_opts:
                         return valid_opts[0]
                 return degree if degree else None
@@ -620,8 +642,10 @@ class AIAnswerer:
                     if match:
                         return match
                     # Try partial match (school name might be abbreviated in options)
-                    school_lower = school.lower()
+                    school_lower = school.lower() if school else ""
                     for opt in options:
+                        if not opt:
+                            continue
                         opt_lower = opt.lower()
                         # Check if key words from school name are in option
                         school_words = [w for w in school_lower.split() if len(w) > 3]
@@ -629,10 +653,10 @@ class AIAnswerer:
                             return opt
                 # If no match found, look for "Other" option
                 for opt in options:
-                    if opt.lower().strip() == "other":
+                    if opt and opt.lower().strip() == "other":
                         return opt
                 # Return first valid option as last resort
-                valid_options = [opt for opt in options if opt.strip() and
+                valid_options = [opt for opt in options if opt and opt.strip() and
                                opt.lower() not in ['select', 'choose', '--', '', 'select...', 'select one']]
                 if valid_options:
                     return valid_options[-1]  # "Other" is usually last
@@ -668,6 +692,8 @@ class AIAnswerer:
             if options:
                 # Look for "Did not take", "Do not recall", "N/A", etc.
                 for opt in options:
+                    if not opt:
+                        continue
                     opt_lower = opt.lower()
                     if "did not take" in opt_lower or "do not recall" in opt_lower or \
                        "don't recall" in opt_lower or "n/a" in opt_lower or \
@@ -698,6 +724,8 @@ class AIAnswerer:
                 if is_citizen:
                     # Look for "U.S. Citizen" or similar
                     for opt in options:
+                        if not opt:
+                            continue
                         opt_lower = opt.lower()
                         if "u.s. citizen" in opt_lower or "us citizen" in opt_lower or \
                            "united states citizen" in opt_lower:
@@ -705,11 +733,13 @@ class AIAnswerer:
                 else:
                     # Look for appropriate non-citizen option
                     for opt in options:
+                        if not opt:
+                            continue
                         opt_lower = opt.lower()
                         if "permanent resident" in opt_lower or "green card" in opt_lower:
                             return opt
                     # Fallback to first valid option
-                    valid_opts = [o for o in options if o.strip() and o.lower() not in ['select', 'choose', '--', '']]
+                    valid_opts = [o for o in options if o and o.strip() and o.lower() not in ['select', 'choose', '--', '']]
                     if valid_opts:
                         return valid_opts[0]
             return "U.S. Citizen" if is_citizen else "Permanent Resident"
@@ -739,6 +769,8 @@ class AIAnswerer:
                                            "employee" in question_lower or "work for" in question_lower):
             if options:
                 for opt in options:
+                    if not opt:
+                        continue
                     opt_lower = opt.lower()
                     if "never worked" in opt_lower or "have not" in opt_lower or "haven't" in opt_lower:
                         return opt
@@ -758,6 +790,8 @@ class AIAnswerer:
         if question_lower.strip() == "affirmation" or "affirmation" in question_lower:
             if options:
                 for opt in options:
+                    if not opt:
+                        continue
                     opt_lower = opt.lower()
                     if "i agree" in opt_lower or "agree" in opt_lower:
                         return opt
@@ -791,12 +825,51 @@ class AIAnswerer:
            ("go by" in question_lower and "name" in question_lower):
             return self.profile.get("first_name", "")
 
+        # Language skills -> select "English" or first available option
+        # Matches: "Language Skill(s)", "What languages do you speak?", etc.
+        if "language" in question_lower and ("skill" in question_lower or "speak" in question_lower or
+                                               "proficient" in question_lower or "fluent" in question_lower):
+            if options:
+                # Look for English
+                for opt in options:
+                    if not opt:
+                        continue
+                    if "english" in opt.lower():
+                        return opt
+                # Fallback to first valid option
+                valid_opts = [o for o in options if o and o.strip() and o.lower() not in ['select', 'choose', '--', '']]
+                if valid_opts:
+                    return valid_opts[0]
+            return "English"
+
+        # Preferred office locations -> select first available option or location from profile
+        # Matches: "Preferred office locations", "Which office do you prefer?", etc.
+        if ("office" in question_lower and ("prefer" in question_lower or "location" in question_lower)) or \
+           ("preferred" in question_lower and ("office" in question_lower or "location" in question_lower)):
+            if options:
+                # Try to match user's city/state
+                city = self.profile.get("address", {}).get("city", "").lower()
+                state = self.profile.get("address", {}).get("state", "").lower()
+                for opt in options:
+                    if not opt:
+                        continue
+                    opt_lower = opt.lower()
+                    if (city and city in opt_lower) or (state and state in opt_lower):
+                        return opt
+                # Fallback to first valid option
+                valid_opts = [o for o in options if o and o.strip() and o.lower() not in ['select', 'choose', '--', '']]
+                if valid_opts:
+                    return valid_opts[0]
+            return self.profile.get("address", {}).get("city", "")
+
         # First-generation professional -> "I don't wish to answer" (prefer not to disclose)
         # Matches: "Are you a first-generation professional?", etc.
         if "first-generation" in question_lower or "first generation" in question_lower:
             if options:
                 # Look for "I don't wish to answer" or similar
                 for opt in options:
+                    if not opt:
+                        continue
                     opt_lower = opt.lower()
                     if "don't wish" in opt_lower or "do not wish" in opt_lower or \
                        "prefer not" in opt_lower or "decline" in opt_lower:
@@ -820,7 +893,7 @@ class AIAnswerer:
         if not options:
             return None
         for opt in options:
-            if opt.lower().strip() == "no":
+            if opt and opt.lower().strip() == "no":
                 return opt
         return None
 
@@ -829,7 +902,7 @@ class AIAnswerer:
         if not options:
             return None
         for opt in options:
-            if opt.lower().strip() == "yes":
+            if opt and opt.lower().strip() == "yes":
                 return opt
         return None
 
@@ -878,8 +951,10 @@ class AIAnswerer:
         variations = self._get_state_variations(state)
 
         for variation in variations:
-            var_lower = variation.lower()
+            var_lower = variation.lower() if variation else ""
             for opt in options:
+                if not opt:
+                    continue
                 opt_lower = opt.lower().strip()
                 # Exact match
                 if opt_lower == var_lower:
@@ -892,25 +967,27 @@ class AIAnswerer:
 
     def _find_option_match(self, options: List[str], target: str) -> Optional[str]:
         """Find an option that matches the target text"""
-        if not options:
+        if not options or not target:
             return None
 
         target_lower = target.lower().strip()
 
         # Exact match
         for opt in options:
-            if opt.lower().strip() == target_lower:
+            if opt and opt.lower().strip() == target_lower:
                 return opt
 
         # Partial match
         for opt in options:
+            if not opt:
+                continue
             opt_lower = opt.lower().strip()
             if target_lower in opt_lower or opt_lower in target_lower:
                 return opt
 
         # Word overlap match
         for opt in options:
-            if self._word_similarity(opt, target) > 0.5:
+            if opt and self._word_similarity(opt, target) > 0.5:
                 return opt
 
         return None
@@ -1060,7 +1137,7 @@ class AIAnswerer:
         # Filter out empty/placeholder options
         valid_options = [
             opt for opt in options
-            if opt.strip() and opt.lower() not in ['select', 'choose', '--', '', 'select...', 'select one']
+            if opt and opt.strip() and opt.lower() not in ['select', 'choose', '--', '', 'select...', 'select one']
         ]
 
         if not valid_options:
@@ -1191,7 +1268,7 @@ Answer rules:
 QUESTION: {question}
 
 AVAILABLE OPTIONS (you MUST pick exactly one):
-{chr(10).join(f'- {opt}' for opt in options if opt.strip() and opt.lower() not in ['select', 'choose', '--', ''])}
+{chr(10).join(f'- {opt}' for opt in options if opt and opt.strip() and opt.lower() not in ['select', 'choose', '--', ''])}
 
 Pick the single best option that represents this candidate. Reply with ONLY the exact text of that option, nothing else:"""
         else:
@@ -1230,7 +1307,7 @@ Provide ONLY the answer, nothing else:"""
                 # If no match, return first valid option as fallback
                 valid_options = [
                     opt for opt in options
-                    if opt.strip() and opt.lower() not in ['select', 'choose', '--', '']
+                    if opt and opt.strip() and opt.lower() not in ['select', 'choose', '--', '']
                 ]
                 if valid_options:
                     return valid_options[0]
