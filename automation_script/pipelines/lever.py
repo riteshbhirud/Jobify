@@ -32,11 +32,11 @@ class LeverPipeline(BasePipeline):
         print("\n" + "="*70)
         print("[Lever] ╔════════════════════════════════════════════════════════════════╗")
         print("[Lever] ║ STARTING APPLICATION FILL                                      ║")
-        print("[Lever] ║ CODE VERSION: 2026-01-22-v5                                    ║")
+        print("[Lever] ║ CODE VERSION: 2026-01-22-v6                                    ║")
+        print("[Lever] ║ - NEW: Opportunity location dropdown at top of form            ║")
         print("[Lever] ║ - Enrollment question fix: Returns YES                         ║")
         print("[Lever] ║ - Location dropdown: NO Enter/ArrowDown (they collapse it)    ║")
         print("[Lever] ║ - BrowserBase bb-custom-select support for university picker  ║")
-        print("[Lever] ║ - OPTIMIZED: JS-based option extraction (fast for 2800+ opts) ║")
         print("[Lever] ╚════════════════════════════════════════════════════════════════╝")
         print("="*70)
 
@@ -60,6 +60,8 @@ class LeverPipeline(BasePipeline):
     async def _fill_form_sections(self) -> Dict[str, Any]:
         """Fill all form sections"""
         try:
+            # Fill opportunity location first (appears at top of form)
+            await self._fill_opportunity_location()
             await self._upload_resume()
             await self._fill_basic_info()
             await self._fill_links()
@@ -72,6 +74,133 @@ class LeverPipeline(BasePipeline):
         except Exception as e:
             print(f"[Lever] Error filling form: {e}")
             raise
+
+    async def _fill_opportunity_location(self):
+        """Fill the 'Which location are you applying for?' dropdown if present.
+
+        This is a required field at the top of some Lever forms with class 'opportunity-location'.
+        In BrowserBase, it uses the bb-custom-select widget.
+        """
+        print("\n[Lever] Checking for opportunity location dropdown...")
+
+        try:
+            # Look for the opportunity location select
+            select_element = await self.page.query_selector(
+                'select.opportunity-location, select[name="opportunityLocationId"], select[data-qa="opportunity-location-select"]'
+            )
+
+            if not select_element:
+                print("  [SKIP] No opportunity location dropdown found")
+                return
+
+            print("  [FOUND] Opportunity location dropdown detected")
+
+            # Check if it's a BrowserBase custom select
+            bb_custom = await self.page.query_selector('.bb-custom-select-container')
+            is_bb_custom = bb_custom is not None
+            print(f"  [INFO] Is BrowserBase custom select: {is_bb_custom}")
+
+            # Get available options via JavaScript (fast)
+            options_js = await select_element.evaluate('''(el) => {
+                const options = [];
+                for (const opt of el.options) {
+                    const value = opt.value;
+                    const text = opt.textContent.trim();
+                    if (value && value.trim() && text && !text.toLowerCase().startsWith('select')) {
+                        options.push({ value: value, text: text });
+                    }
+                }
+                return options;
+            }''')
+
+            if not options_js or len(options_js) == 0:
+                print("  [SKIP] No valid options found in dropdown")
+                return
+
+            print(f"  [INFO] Found {len(options_js)} location options:")
+            for opt in options_js[:5]:
+                print(f"         - {opt['text']}")
+
+            # Get user's preferred location from profile
+            user_city = self.profile.get("address", {}).get("city", "").lower()
+            user_state = self.profile.get("address", {}).get("state", "").lower()
+
+            # Try to find a matching location, otherwise pick first valid option
+            selected_option = None
+            for opt in options_js:
+                opt_lower = opt['text'].lower()
+                if (user_city and user_city in opt_lower) or (user_state and user_state in opt_lower):
+                    selected_option = opt
+                    print(f"  [MATCH] Found location matching user profile: {opt['text']}")
+                    break
+
+            # Default to first option if no match
+            if not selected_option:
+                selected_option = options_js[0]
+                print(f"  [DEFAULT] Using first available location: {selected_option['text']}")
+
+            # Set the value using JavaScript (works for both regular and bb-custom-select)
+            select_name = await select_element.get_attribute("name")
+            select_id = await select_element.get_attribute("id")
+
+            js_result = await self.page.evaluate('''(args) => {
+                const [selectName, selectId, targetValue, targetText] = args;
+
+                // Find the select element
+                let select = null;
+                if (selectId) select = document.getElementById(selectId);
+                if (!select && selectName) select = document.querySelector(`select[name="${selectName}"]`);
+                if (!select) select = document.querySelector('select.opportunity-location');
+                if (!select) return { success: false, error: 'Select not found' };
+
+                // Set the value
+                select.value = targetValue;
+
+                // Mark the option as selected
+                for (const opt of select.options) {
+                    opt.selected = (opt.value === targetValue);
+                }
+
+                // Dispatch events
+                select.dispatchEvent(new Event('change', { bubbles: true }));
+                select.dispatchEvent(new Event('input', { bubbles: true }));
+
+                // Update BrowserBase custom select display if present
+                const container = select.closest('.bb-custom-select-container');
+                if (container) {
+                    const opener = container.querySelector('.bb-custom-select-opener span');
+                    if (opener) {
+                        opener.textContent = targetText;
+                    }
+                }
+
+                // Trigger jQuery if available
+                if (typeof jQuery !== 'undefined') {
+                    try {
+                        jQuery(select).val(targetValue).trigger('change');
+                    } catch(e) {}
+                }
+
+                return { success: select.value === targetValue, value: select.value };
+            }''', [select_name, select_id, selected_option['value'], selected_option['text']])
+
+            if js_result and js_result.get('success'):
+                print(f"  [OK] Selected opportunity location: {selected_option['text']}")
+                self.answers_used['Opportunity Location'] = selected_option['text']
+            else:
+                print(f"  [WARN] JavaScript selection returned: {js_result}")
+                # Fallback: try Playwright's selectOption
+                try:
+                    await select_element.select_option(value=selected_option['value'])
+                    print(f"  [OK] Selected via Playwright: {selected_option['text']}")
+                    self.answers_used['Opportunity Location'] = selected_option['text']
+                except Exception as e:
+                    print(f"  [ERROR] Fallback selection failed: {e}")
+
+            await self.human.random_delay(0.5, 1.0)
+
+        except Exception as e:
+            print(f"  [ERROR] Opportunity location handling failed: {e}")
 
     async def _upload_resume(self):
         """Upload resume file"""
