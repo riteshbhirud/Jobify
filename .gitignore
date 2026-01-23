@@ -27,3 +27,6 @@ npm-debug.log*
 
 # Testing
 coverage
+automation_script/screenshots/lever_error.png
+automation_script/screenshots/lever_initial.png
+automation_script/screenshots/lever_pre_submit.png

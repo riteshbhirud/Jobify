@@ -59,59 +59,116 @@ class AIAnswerer:
         question_clean = question.strip()
         question_lower = question_clean.lower()
 
+        print(f"    [AI_ANSWER] ╔═══════════════════════════════════════════════════════════╗")
+        print(f"    [AI_ANSWER] ║ get_answer called - VERSION: 2026-01-22-v4               ║")
+        print(f"    [AI_ANSWER] ║ FIX: EAR pattern uses word boundary (no hear/year match) ║")
+        print(f"    [AI_ANSWER] ║ FIX: Location checkbox excludes 'None of these'          ║")
+        print(f"    [AI_ANSWER] ╚═══════════════════════════════════════════════════════════╝")
+        print(f"    [AI_ANSWER] Question: '{question_clean[:60]}...'")
+        print(f"    [AI_ANSWER] Field type: {field_type}")
+        print(f"    [AI_ANSWER] Options: {options[:5] if options else 'None'}{'...' if options and len(options) > 5 else ''}")
+
+        # ╔════════════════════════════════════════════════════════════════════════╗
+        # ║ PRIORITY OVERRIDE: Enrollment questions ALWAYS return YES             ║
+        # ║ This runs BEFORE common_answers to ensure correct behavior            ║
+        # ╚════════════════════════════════════════════════════════════════════════╝
+        if ("enrolled" in question_lower and
+            ("college" in question_lower or "university" in question_lower)):
+            print(f"    [PRIORITY] ╔══════════════════════════════════════════════════════════╗")
+            print(f"    [PRIORITY] ║ ★★★ ENROLLMENT OVERRIDE TRIGGERED ★★★                   ║")
+            print(f"    [PRIORITY] ║ Returning YES before checking common_answers            ║")
+            print(f"    [PRIORITY] ╚══════════════════════════════════════════════════════════╝")
+            yes_option = self._find_yes_option(options) if options else None
+            return yes_option or "Yes"
+
         # 1. Check exact match in common_answers
         common_answers = self.profile.get("common_answers", {})
         if question_clean in common_answers:
-            return common_answers[question_clean]
+            answer = common_answers[question_clean]
+            print(f"    [AI_ANSWER] ✓ EXACT MATCH in common_answers: '{answer}'")
+            return answer
 
         # 2. Check fuzzy match in common_answers
         for stored_q, stored_a in common_answers.items():
             stored_lower = stored_q.lower()
             # Check if question contains the stored question or vice versa
             if stored_lower in question_lower or question_lower in stored_lower:
+                print(f"    [AI_ANSWER] ✓ FUZZY MATCH in common_answers: '{stored_a}'")
                 return stored_a
             # Check for significant word overlap
             if self._word_similarity(question_lower, stored_lower) > 0.7:
+                print(f"    [AI_ANSWER] ✓ WORD SIMILARITY MATCH in common_answers: '{stored_a}'")
                 return stored_a
 
-        # 2.5. For checkbox (multi-select), ALWAYS use AI - skip pattern matching
-        # Checkboxes need AI to pick multiple relevant options from the user's profile
+        # 2.5. For checkbox (multi-select), check if it's a location question first
+        # Location checkboxes should select ALL options EXCEPT contradictory ones
         if options and field_type == "checkbox":
+            # Check if it's a location/office preference checkbox - select ALL (except "none")
+            if ("location" in question_lower or "office" in question_lower or
+                "city" in question_lower or "cities" in question_lower or
+                "where would you like to work" in question_lower):
+                print(f"    [PATTERN] Location checkbox - selecting ALL options (excluding 'none' variants)")
+                # Filter out "None of these", "None", "N/A" and similar contradictory options
+                valid_options = [
+                    opt for opt in options
+                    if opt and opt.strip() and
+                    opt.lower().strip() not in ['none', 'n/a', 'na', 'not applicable'] and
+                    'none of' not in opt.lower()
+                ]
+                print(f"    [PATTERN] Filtered options: {valid_options}")
+                return ", ".join(valid_options)
+
+            # For other checkboxes, use AI
             print(f"    [AI] Using OpenAI for checkbox multi-select: {question[:50]}...")
             return self._generate_checkbox_answer(question, options)
 
         # 3. Check pattern-based rules (skip for checkbox - handled above)
+        print(f"    [AI_ANSWER] Checking pattern-based rules...")
         pattern_answer = self._check_patterns(question_lower, options)
         if pattern_answer is not None:
+            print(f"    [AI_ANSWER] ✓ PATTERN MATCHED! Answer: '{pattern_answer}'")
             return pattern_answer
+        print(f"    [AI_ANSWER]   No pattern match")
 
         # 4. Check if it's asking for profile data
+        print(f"    [AI_ANSWER] Checking profile data extraction...")
         profile_answer = self._extract_from_profile(question_lower)
         if profile_answer:
+            print(f"    [AI_ANSWER] ✓ PROFILE DATA found: '{profile_answer}'")
             return profile_answer
+        print(f"    [AI_ANSWER]   No profile data match")
 
         # 5. For dropdowns, try to match options intelligently
         if options and field_type in ["select", "radio"]:
+            print(f"    [AI_ANSWER] Trying dropdown option matching...")
             option_answer = self._match_dropdown_option(question_lower, options)
             if option_answer:
+                print(f"    [AI_ANSWER] ✓ DROPDOWN MATCH found: '{option_answer}'")
                 return option_answer
+            print(f"    [AI_ANSWER]   No dropdown option match")
 
         # 6. Use AI for open-ended questions (textarea, complex questions)
         if field_type == "textarea" or self._is_open_ended_question(question_lower):
+            print(f"    [AI_ANSWER] Using AI for open-ended question...")
             return self._generate_ai_answer(question, field_type, options, max_length)
 
         # 7. LAST RESORT: For dropdowns/radio with no match, use AI to pick best option
         if options and field_type in ["select", "radio"]:
-            print(f"    [AI FALLBACK] Using OpenAI for dropdown: {question[:50]}...")
-            return self._generate_ai_answer(question, field_type, options, max_length)
+            print(f"    [AI_ANSWER] ━━━ FALLBACK: Using OpenAI for dropdown ━━━")
+            answer = self._generate_ai_answer(question, field_type, options, max_length)
+            print(f"    [AI_ANSWER] AI returned: '{answer}'")
+            return answer
 
         # 8. LAST RESORT: For simple text fields with no match, use AI to generate answer
         # This catches questions like "Please specify", "Are you local to X?", etc.
         if field_type == "text":
-            print(f"    [AI FALLBACK] Using OpenAI for text field: {question[:50]}...")
-            return self._generate_ai_answer(question, field_type, options, max_length)
+            print(f"    [AI_ANSWER] ━━━ FALLBACK: Using OpenAI for text field ━━━")
+            answer = self._generate_ai_answer(question, field_type, options, max_length)
+            print(f"    [AI_ANSWER] AI returned: '{answer}'")
+            return answer
 
         # 9. No handler found - return None
+        print(f"    [AI_ANSWER] ✗ NO ANSWER FOUND - returning None")
         return None
 
     def _word_similarity(self, text1: str, text2: str) -> float:
@@ -128,6 +185,12 @@ class AIAnswerer:
 
     def _check_patterns(self, question_lower: str, options: List[str] = None) -> Optional[str]:
         """Check for common patterns that don't need AI"""
+        print(f"    [PATTERNS] ╔══════════════════════════════════════════════════════════╗")
+        print(f"    [PATTERNS] ║ _check_patterns called - VERSION: 2026-01-22-v4         ║")
+        print(f"    [PATTERNS] ║ FIX: EAR uses regex word boundary \\bear\\b               ║")
+        print(f"    [PATTERNS] ╚══════════════════════════════════════════════════════════╝")
+        print(f"    [PATTERNS] Question (lower): '{question_lower[:80]}...'")
+        print(f"    [PATTERNS] Options: {options}")
 
         # Work authorization patterns -> Yes
         yes_auth_patterns = [
@@ -307,9 +370,11 @@ class AIAnswerer:
         # Export Compliance / U.S. Person questions
         # Options typically: "I am currently a U.S. Person", "I will soon become a U.S. Person",
         # "I am not a U.S. Person, but I am eligible for licensing"
+        # NOTE: "ear" check uses word boundary to avoid matching "hear" or "year"
+        ear_match = re.search(r'\bear\b', question_lower)  # Match "EAR" as standalone word only
         if ("export compliance" in question_lower or "u.s. person" in question_lower or
             "us person" in question_lower or "export control" in question_lower or
-            "itar" in question_lower or "ear" in question_lower):
+            "itar" in question_lower or ear_match):
             is_citizen = self.profile.get("is_us_citizen", True)
             if options:
                 if is_citizen:
@@ -437,12 +502,25 @@ class AIAnswerer:
                         return opt
             return "No"
 
-        # Preferred location -> choose first option or any available
-        if "preferred location" in question_lower or "location preference" in question_lower:
+        # Location selection questions -> pick any valid option (first available)
+        # Matches: "Which location are you applying for?", "Preferred location", etc.
+        if (("location" in question_lower and ("applying" in question_lower or "prefer" in question_lower or
+             "which" in question_lower or "select" in question_lower)) or
+            "preferred location" in question_lower or "location preference" in question_lower or
+            "opportunity location" in question_lower or "job location" in question_lower or
+            "office location" in question_lower):
             if options:
                 valid_options = [opt for opt in options if opt and opt.strip() and
-                               opt.lower() not in ['select', 'choose', '--', '', 'select...', 'select one']]
+                               opt.lower() not in ['select', 'choose', '--', '', 'select...', 'select one', 'select...']]
                 if valid_options:
+                    # Try to match user's city/state first
+                    city = self.profile.get("address", {}).get("city", "").lower()
+                    state = self.profile.get("address", {}).get("state", "").lower()
+                    for opt in valid_options:
+                        opt_lower = opt.lower()
+                        if (city and city in opt_lower) or (state and state in opt_lower):
+                            return opt
+                    # Otherwise just pick the first valid option
                     return valid_options[0]
             return self.profile.get("address", {}).get("city", "")
 
@@ -632,41 +710,89 @@ class AIAnswerer:
                         return valid_opts[0]
                 return degree if degree else None
 
+        # ╔════════════════════════════════════════════════════════════════════════╗
+        # ║ ENROLLMENT CHECK - MUST COME BEFORE UNIVERSITY SELECTION              ║
+        # ║ Currently enrolled in college/university -> ALWAYS YES                ║
+        # ╚════════════════════════════════════════════════════════════════════════╝
+        enrollment_check_enrolled = "enrolled" in question_lower
+        enrollment_check_college = "college" in question_lower
+        enrollment_check_university = "university" in question_lower
+
+        print(f"    [ENROLLMENT-CHECK] 'enrolled' in question: {enrollment_check_enrolled}")
+        print(f"    [ENROLLMENT-CHECK] 'college' in question: {enrollment_check_college}")
+        print(f"    [ENROLLMENT-CHECK] 'university' in question: {enrollment_check_university}")
+
+        if enrollment_check_enrolled and (enrollment_check_college or enrollment_check_university):
+            print(f"    [PATTERN] ╔══════════════════════════════════════════════════════════╗")
+            print(f"    [PATTERN] ║ ★★★ ENROLLMENT QUESTION DETECTED ★★★                    ║")
+            print(f"    [PATTERN] ╚══════════════════════════════════════════════════════════╝")
+            print(f"    [PATTERN] Question: {question_lower[:60]}")
+            yes_option = self._find_yes_option(options)
+            print(f"    [PATTERN] _find_yes_option returned: '{yes_option}'")
+            print(f"    [PATTERN] RETURNING: 'Yes'")
+            return yes_option or "Yes"
+
+        # Also handle "Are you currently a student?" style questions
+        student_currently = "currently" in question_lower and "student" in question_lower
+        student_are_you = "are you" in question_lower and "student" in question_lower
+
+        print(f"    [STUDENT-CHECK] 'currently' + 'student' in question: {student_currently}")
+        print(f"    [STUDENT-CHECK] 'are you' + 'student' in question: {student_are_you}")
+
+        if student_currently or student_are_you:
+            print(f"    [PATTERN] ╔══════════════════════════════════════════════════════════╗")
+            print(f"    [PATTERN] ║ ★★★ STUDENT STATUS QUESTION DETECTED ★★★                ║")
+            print(f"    [PATTERN] ╚══════════════════════════════════════════════════════════╝")
+            print(f"    [PATTERN] Question: {question_lower[:60]}")
+            yes_option = self._find_yes_option(options)
+            print(f"    [PATTERN] _find_yes_option returned: '{yes_option}'")
+            print(f"    [PATTERN] RETURNING: 'Yes'")
+            return yes_option or "Yes"
+        # ════════════════════════ END ENROLLMENT CHECK ════════════════════════════
+
         # University/school selection -> match from profile or choose "Other"
+        # NOTE: Enrollment questions are already handled above
         if ("university" in question_lower or "school" in question_lower or
             "college" in question_lower or "institution" in question_lower) and \
            ("attending" in question_lower or "currently" in question_lower or
             "enrolled" in question_lower or "study" in question_lower or
             "which" in question_lower):
-            education = self.profile.get("education", [])
-            if education and options:
-                current_edu = next((e for e in education if e.get("current")), education[0])
-                school = current_edu.get("school", "")
-                if school:
-                    # Try exact match first
-                    match = self._find_option_match(options, school)
-                    if match:
-                        return match
-                    # Try partial match (school name might be abbreviated in options)
-                    school_lower = school.lower() if school else ""
-                    for opt in options:
-                        if not opt:
-                            continue
-                        opt_lower = opt.lower()
-                        # Check if key words from school name are in option
-                        school_words = [w for w in school_lower.split() if len(w) > 3]
-                        if any(word in opt_lower for word in school_words):
-                            return opt
-                # If no match found, look for "Other" option
-                for opt in options:
-                    if opt and opt.lower().strip() == "other":
-                        return opt
-                # Return first valid option as last resort
-                valid_options = [opt for opt in options if opt and opt.strip() and
-                               opt.lower() not in ['select', 'choose', '--', '', 'select...', 'select one']]
-                if valid_options:
-                    return valid_options[-1]  # "Other" is usually last
-            return "Other"
+            # Skip yes/no questions - enrollment is handled above
+            if options:
+                option_set = {opt.lower().strip() for opt in options if opt}
+                if option_set == {'yes', 'no'} or option_set <= {'yes', 'no', ''}:
+                    print(f"    [PATTERN] University pattern skipping yes/no question")
+                    pass  # Skip, enrollment should have handled it
+                else:
+                    education = self.profile.get("education", [])
+                    if education:
+                        current_edu = next((e for e in education if e.get("current")), education[0])
+                        school = current_edu.get("school", "")
+                        if school:
+                            # Try exact match first
+                            match = self._find_option_match(options, school)
+                            if match:
+                                return match
+                            # Try partial match (school name might be abbreviated in options)
+                            school_lower = school.lower() if school else ""
+                            for opt in options:
+                                if not opt:
+                                    continue
+                                opt_lower = opt.lower()
+                                # Check if key words from school name are in option
+                                school_words = [w for w in school_lower.split() if len(w) > 3]
+                                if any(word in opt_lower for word in school_words):
+                                    return opt
+                        # If no match found, look for "Other" option
+                        for opt in options:
+                            if opt and opt.lower().strip() == "other":
+                                return opt
+                        # Return first valid option as last resort
+                        valid_options = [opt for opt in options if opt and opt.strip() and
+                                       opt.lower() not in ['select', 'choose', '--', '', 'select...', 'select one']]
+                        if valid_options:
+                            return valid_options[-1]  # "Other" is usually last
+                    return "Other"
 
         # Questions that explicitly mention "N/A" as an option -> use N/A as fallback
         # Matches: "If none, please write N/A", "enter N/A if not applicable", etc.
@@ -891,6 +1017,7 @@ class AIAnswerer:
             return self._find_no_option(options) or "No"
 
         # ==================== END NEW PATTERNS ====================
+        # NOTE: Enrollment patterns moved to the TOP of _check_patterns (before university selection)
 
         return None
 
