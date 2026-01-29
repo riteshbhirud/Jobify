@@ -15,6 +15,7 @@ import { CompletionScreen } from '@/components/onboarding/CompletionScreen'
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner'
 import { Logo } from '@/components/shared/Logo'
 
+
 const TOTAL_STEPS = 7
 
 const STEP_TITLES = [
@@ -133,7 +134,7 @@ export default function OnboardingPage() {
       }
 
       // Call backend to complete onboarding and generate embedding
-      const response = await fetch('http://localhost:8000/api/users/me/complete-onboarding', {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users/me/complete-onboarding`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${sessionData.session.access_token}`,

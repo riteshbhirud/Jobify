@@ -48,6 +48,8 @@ interface ApiStats {
   }
 }
 
+
+
 type SortOption = 'date-desc' | 'date-asc' | 'salary-desc' | 'salary-asc' | 'none'
 
 export default function JobsPage() {
@@ -62,7 +64,7 @@ export default function JobsPage() {
 
   const fetchCachedJobs = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/jobs/cached')
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/jobs/cached`)
       const data = await response.json()
 
       if (data.success) {
@@ -82,7 +84,7 @@ export default function JobsPage() {
   const triggerScrape = async () => {
     setIsRefreshing(true)
     try {
-      const response = await fetch('http://localhost:8000/api/jobs/scrape', {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/jobs/scrape`, {
         method: 'POST',
       })
       const data = await response.json()
