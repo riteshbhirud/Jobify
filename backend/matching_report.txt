@@ -1,0 +1,1330 @@
+================================================================================
+JOBIFY JOB MATCHING REPORT
+Generated: 2026-01-29 16:46:13
+================================================================================
+
+Total Test Users: 10
+Total Jobs in Database: 188
+
+Matching Algorithm (v2 - Improved):
+  - Cosine similarity between user and job embeddings (50% weight)
+  - Role category matching:
+      * Exact category match (ML/AI, Frontend, Backend, etc.): +10%
+      * Related category match: +5%
+      * Category mismatch penalty: -8%
+  - Skill matching (up to +10%)
+  - Preference bonuses (up to 35% total cap):
+      * Remote/hybrid preference match (+8%/+5%)
+      * Preferred company match (+8%)
+      * Location match with metro area expansion (+5%)
+      * Job title similarity to target role (up to +12%)
+      * Experience level match (+8% exact, +3% stretch)
+      * Salary fit bonus (+5% meets floor, +3% good potential)
+  - Penalties:
+      * On-site job for remote seeker (-10%)
+      * Experience mismatch (-3% to -12%, graduated)
+  - Hard filters (eliminate job entirely):
+      * Job type (internship vs full-time)
+      * Visa sponsorship requirement
+      * Minimum salary requirement
+      * Excluded companies
+
+================================================================================
+
+USER 1: Priya Sharma
+--------------------------------------------------------------------------------
+
+PROFILE:
+  Name: Priya Sharma
+  Email: priya.sharma@jobify-test.com
+  Target Role: Machine Learning Engineer
+  Target Type: full_time
+  Experience Level: mid-level
+  Remote Preference: remote
+  Preferred Locations: San Francisco Bay Area, Remote
+  Min Salary: $150,000
+  Needs Visa Sponsorship: Yes
+  Top Skills: Python, PyTorch, TensorFlow, Scikit-learn, Pandas, NumPy, Deep Learning, NLP...
+  Preferred Companies: OpenAI, Anthropic, DeepMind, Google
+
+TOP 5 JOB MATCHES:
+
+  #1. Staff Embedded Software Engineer - Camera Firmware
+      Company: Verkada
+      Location: San Mateo, California, United States
+      Employment Type: FULL_TIME
+      Remote Type: On-site
+      Salary: $200,000 - $300,000
+      Experience Level: 10+
+      Visa Sponsorship: Yes
+      
+      MATCH SCORE: 0.0810 (8.1%)
+      Score Breakdown:
+        - Embedding (50%): 0.197
+        - Bonuses: +0.124
+        - Penalties: -0.240
+      Role Categories: user=ml_ai, job=embedded
+      Matched Skills: Python, Computer Vision
+      Bonuses:
+        + Skills matched: 2 skills
+        + Metro area match: San Francisco Bay Area area
+        + Salary floor meets expectations
+      Penalties:
+        - Role mismatch: user wants ml_ai, job is embedded
+        - On-site only job (user prefers remote)
+        - Job requires more experience (10+ vs user: mid-level)
+      Apply URL: https://job-boards.greenhouse.io/verkada/jobs/5029602007
+
+  #2. Senior Lead Software Engineer, DevOps (Global Payment Network)
+      Company: Capital One
+      Location: Riverwoods, Illinois, United States
+      Employment Type: FULL_TIME
+      Remote Type: On-site
+      Salary: $209,000 - $262,400
+      Experience Level: 10+
+      Visa Sponsorship: Yes
+      
+      MATCH SCORE: 0.0663 (6.6%)
+      Score Breakdown:
+        - Embedding (50%): 0.208
+        - Bonuses: +0.098
+        - Penalties: -0.240
+      Role Categories: user=ml_ai, job=devops_infra
+      Matched Skills: Python, Deep Learning, Kubernetes, SQL
+      Bonuses:
+        + Skills matched: 4 skills
+        + Salary floor meets expectations
+      Penalties:
+        - Role mismatch: user wants ml_ai, job is devops_infra
+        - On-site only job (user prefers remote)
+        - Job requires more experience (10+ vs user: mid-level)
+      Apply URL: https://capitalone.wd12.myworkdayjobs.com/Capital_One/job/Riverwoods-IL/Senior-L...
+
+  #3. Senior Software Engineer
+      Company: Red River
+      Location: Boston, Massachusetts, United States
+      Employment Type: FULL_TIME
+      Remote Type: Remote OK
+      Salary: $133,650 - $220,680
+      Experience Level: 10+
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.0000 (0.0%)
+      - Embedding Similarity: 0.3829
+      - Preference Bonus: +0.000
+      Filters Failed:
+        ! Requires visa sponsorship but job doesn't offer it
+      Apply URL: https://redhat.wd5.myworkdayjobs.com/Jobs/job/Boston/Senior-Software-Engineer_R-...
+
+  #4. Senior Software Engineer
+      Company: Western Union
+      Location: Atlanta, Georgia, United States
+      Employment Type: FULL_TIME
+      Remote Type: Hybrid
+      Salary: $120,000 - $150,000
+      Experience Level: 2-5
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.0000 (0.0%)
+      - Embedding Similarity: 0.3290
+      - Preference Bonus: +0.000
+      Filters Failed:
+        ! Requires visa sponsorship but job doesn't offer it
+      Apply URL: https://westernunion.wd5.myworkdayjobs.com/WesternUnionJobs/job/USA-GA---Atlanta...
+
+  #5. Software Engineer Intern
+      Company: Premier Inc.
+      Location: Charlotte, North Carolina, United States
+      Employment Type: FULL_TIME, INTERN
+      Remote Type: On-site
+      Salary: $52,000 - $78,000
+      Experience Level: 0-2
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.0000 (0.0%)
+      - Embedding Similarity: 0.3554
+      - Preference Bonus: +0.000
+      Filters Failed:
+        ! Requires visa sponsorship but job doesn't offer it
+        ! Job salary ($78,000) below user minimum ($150,000)
+      Apply URL: https://premierinc.wd1.myworkdayjobs.com/External_Professional/job/Charlotte-NC/...
+
+================================================================================
+
+USER 2: Maya Rodriguez
+--------------------------------------------------------------------------------
+
+PROFILE:
+  Name: Maya Rodriguez
+  Email: maya.rodriguez@jobify-test.com
+  Target Role: Reinforcement Learning Researcher
+  Target Type: full_time
+  Experience Level: senior
+  Remote Preference: hybrid
+  Preferred Locations: San Francisco Bay Area, Seattle, WA, Remote
+  Min Salary: $200,000
+  Needs Visa Sponsorship: No
+  Top Skills: Reinforcement Learning, PyTorch, JAX, Python, Deep Learning, Multi-Agent Systems, Game Theory, Mathematical Optimization...
+  Preferred Companies: Anthropic, OpenAI, DeepMind, Google Brain
+
+TOP 5 JOB MATCHES:
+
+  #1. Senior Software Engineer – AI Applications
+      Company: Bezos Academy
+      Location: Seattle, Washington, United States
+      Employment Type: FULL_TIME
+      Remote Type: On-site
+      Salary: $161,000 - $255,000
+      Experience Level: 10+
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.4472 (44.7%)
+      Score Breakdown:
+        - Embedding (50%): 0.239
+        - Bonuses: +0.208
+        - Penalties: -0.000
+      Role Categories: user=research, job=ml_ai
+      Matched Skills: PyTorch, Python, Deep Learning, Research
+      Bonuses:
+        + Role category match: research
+        + Skills matched: 4 skills
+        + Metro area match: Seattle, WA area
+        + Stretch role (+1 level)
+        + Salary range has good potential
+      Apply URL: https://job-boards.greenhouse.io/day1academies/jobs/8365329002
+
+  #2. Software Engineer, Bolt - Mountain View
+      Company: DeepMind
+      Location: Mountain View, California, United States
+      Employment Type: FULL_TIME
+      Remote Type: On-site
+      Salary: $141,000 - $202,000
+      Experience Level: 2-5
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.4362 (43.6%)
+      Score Breakdown:
+        - Embedding (50%): 0.238
+        - Bonuses: +0.228
+        - Penalties: -0.030
+      Role Categories: user=research, job=ml_ai
+      Matched Skills: Reinforcement Learning, Python, Deep Learning, Research
+      Bonuses:
+        + Role category match: research
+        + Skills matched: 4 skills
+        + Preferred company: DeepMind
+        + Metro area match: San Francisco Bay Area area
+      Penalties:
+        - Job slightly below level (2-5 vs user: senior)
+      Apply URL: https://job-boards.greenhouse.io/deepmind/jobs/7520889
+
+  #3. Principal Software Engineer
+      Company: Typeface
+      Location: Bellevue, Washington, United States
+      Employment Type: FULL_TIME
+      Remote Type: Hybrid
+      Salary: $247,500 - $267,000
+      Experience Level: 10+
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.4343 (43.4%)
+      Score Breakdown:
+        - Embedding (50%): 0.204
+        - Bonuses: +0.230
+        - Penalties: -0.000
+      Role Categories: user=research, job=ml_ai
+      Bonuses:
+        + Role category match: research
+        + Hybrid job matches preference
+        + Metro area match: Seattle, WA area
+        + Stretch role (+1 level)
+        + Salary floor meets expectations
+      Apply URL: https://job-boards.greenhouse.io/typeface/jobs/5037370007
+
+  #4. Staff Software Engineer - AI Growth Lead
+      Company: Coinbase Careers Page
+      Location: United States
+      Employment Type: FULL_TIME
+      Remote Type: Hybrid
+      Salary: $218,025 - $256,500
+      Experience Level: 10+
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.4152 (41.5%)
+      Score Breakdown:
+        - Embedding (50%): 0.199
+        - Bonuses: +0.216
+        - Penalties: -0.000
+      Role Categories: user=research, job=ml_ai
+      Matched Skills: Python, Deep Learning, Research
+      Bonuses:
+        + Role category match: research
+        + Skills matched: 3 skills
+        + Hybrid job matches preference
+        + Stretch role (+1 level)
+        + Salary floor meets expectations
+      Apply URL: https://www.coinbase.com/careers/positions/7575042?gh_jid=7575042
+
+  #5. Software Engineer, Product
+      Company: Pallet
+      Location: San Francisco, California, United States
+      Employment Type: FULL_TIME
+      Remote Type: On-site
+      Salary: $175,000 - $265,000
+      Experience Level: 5-10
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.4063 (40.6%)
+      Score Breakdown:
+        - Embedding (50%): 0.184
+        - Bonuses: +0.222
+        - Penalties: -0.000
+      Role Categories: user=research, job=ml_ai
+      Matched Skills: Deep Learning
+      Bonuses:
+        + Role category match: research
+        + Skills matched: 1 skills
+        + Metro area match: San Francisco Bay Area area
+        + Experience level match: 5-10
+        + Salary range has good potential
+      Apply URL: https://job-boards.greenhouse.io/pallet/jobs/5018592007
+
+================================================================================
+
+USER 3: Sam Johnson
+--------------------------------------------------------------------------------
+
+PROFILE:
+  Name: Sam Johnson
+  Email: sam.johnson@jobify-test.com
+  Target Role: Frontend Developer
+  Target Type: full_time
+  Experience Level: mid-level
+  Remote Preference: remote
+  Preferred Locations: Chicago, IL, Remote
+  Min Salary: $115,000
+  Needs Visa Sponsorship: No
+  Top Skills: React, TypeScript, JavaScript, Next.js, CSS, Tailwind CSS, HTML, Redux...
+  Preferred Companies: Vercel, Figma, Linear, Notion
+
+TOP 5 JOB MATCHES:
+
+  #1. Senior Software Engineer - Web
+      Company: C the Signs
+      Location: Milwaukee, Wisconsin, United States
+      Employment Type: FULL_TIME
+      Remote Type: Remote OK
+      Experience Level: 5-10
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.5699 (57.0%)
+      Score Breakdown:
+        - Embedding (50%): 0.260
+        - Bonuses: +0.310
+        - Penalties: -0.000
+      Role Categories: user=frontend, job=frontend
+      Matched Skills: React, TypeScript, JavaScript, CSS, HTML
+      Bonuses:
+        + Role category match: frontend
+        + Skills matched: 10 skills
+        + Remote job matches preference
+        + Stretch role (+1 level)
+      Apply URL: https://jobs.workable.com/view/bsfA4gPCsLDLPDhQUWp4ZH/remote-senior-software-eng...
+
+  #2. Senior Front End Software Engineer
+      Company: Affinitiv
+      Location: United States
+      Employment Type: FULL_TIME
+      Remote Type: Remote OK
+      Experience Level: 5-10
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.5442 (54.4%)
+      Score Breakdown:
+        - Embedding (50%): 0.262
+        - Bonuses: +0.282
+        - Penalties: -0.000
+      Role Categories: user=frontend, job=frontend
+      Matched Skills: React, TypeScript, JavaScript, CSS, HTML
+      Bonuses:
+        + Role category match: frontend
+        + Skills matched: 6 skills
+        + Remote job matches preference
+        + Stretch role (+1 level)
+      Apply URL: https://job-boards.greenhouse.io/affinitiv/jobs/7601596003
+
+  #3. Senior Software Engineer, Frontend - Developer Experience
+      Company: Coinbase Careers Page
+      Location: United States
+      Employment Type: FULL_TIME
+      Remote Type: Hybrid
+      Salary: $186,065 - $218,900
+      Experience Level: 2-5
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.5374 (53.7%)
+      Score Breakdown:
+        - Embedding (50%): 0.245
+        - Bonuses: +0.293
+        - Penalties: -0.000
+      Role Categories: user=frontend, job=frontend
+      Matched Skills: React, GraphQL, Accessibility
+      Bonuses:
+        + Role category match: frontend
+        + Skills matched: 3 skills
+        + Partial title match: 33%
+        + Experience level match: 2-5
+        + Salary floor meets expectations
+      Apply URL: https://www.coinbase.com/careers/positions/7569231?gh_jid=7569231
+
+  #4. Senior Software Engineer, Frontend - Developer Experience
+      Company: Coinbase Careers Page
+      Location: United States
+      Employment Type: FULL_TIME
+      Remote Type: Hybrid
+      Salary: $186,065 - $218,900
+      Experience Level: 2-5
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.5374 (53.7%)
+      Score Breakdown:
+        - Embedding (50%): 0.245
+        - Bonuses: +0.293
+        - Penalties: -0.000
+      Role Categories: user=frontend, job=frontend
+      Matched Skills: React, GraphQL, Accessibility
+      Bonuses:
+        + Role category match: frontend
+        + Skills matched: 3 skills
+        + Partial title match: 33%
+        + Experience level match: 2-5
+        + Salary floor meets expectations
+      Apply URL: https://www.coinbase.com/careers/positions/7576385?gh_jid=7576385
+
+  #5. Software Engineer II, Frontend
+      Company: Crunchyroll, LLC
+      Location: San Francisco, California, United States
+      Employment Type: FULL_TIME
+      Remote Type: Hybrid
+      Salary: $135,000 - $169,000
+      Experience Level: 2-5
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.5331 (53.3%)
+      Score Breakdown:
+        - Embedding (50%): 0.243
+        - Bonuses: +0.290
+        - Penalties: -0.000
+      Role Categories: user=frontend, job=frontend
+      Matched Skills: React, TypeScript, JavaScript, CSS, Performance Optimization
+      Bonuses:
+        + Role category match: frontend
+        + Skills matched: 5 skills
+        + Experience level match: 2-5
+        + Salary floor meets expectations
+      Apply URL: https://boards.greenhouse.io/crunchyroll/jobs/7262899?gh_jid=7262899
+
+================================================================================
+
+USER 4: Aisha Patel
+--------------------------------------------------------------------------------
+
+PROFILE:
+  Name: Aisha Patel
+  Email: aisha.patel@jobify-test.com
+  Target Role: Machine Learning Research Intern
+  Target Type: internship
+  Experience Level: entry
+  Remote Preference: any
+  Preferred Locations: Boston, MA, New York, NY, San Francisco Bay Area
+  Min Salary: $50
+  Needs Visa Sponsorship: Yes
+  Top Skills: Python, PyTorch, TensorFlow, Machine Learning, Deep Learning, NLP, Research, LaTeX...
+  Preferred Companies: OpenAI, Anthropic, Google DeepMind, Meta AI
+
+TOP 5 JOB MATCHES:
+
+  #1. Senior Software Engineer
+      Company: Red River
+      Location: Boston, Massachusetts, United States
+      Employment Type: FULL_TIME
+      Remote Type: Remote OK
+      Salary: $133,650 - $220,680
+      Experience Level: 10+
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.0000 (0.0%)
+      - Embedding Similarity: 0.3692
+      - Preference Bonus: +0.000
+      Filters Failed:
+        ! User seeking internship but job is FULL_TIME
+        ! Requires visa sponsorship but job doesn't offer it
+      Apply URL: https://redhat.wd5.myworkdayjobs.com/Jobs/job/Boston/Senior-Software-Engineer_R-...
+
+  #2. Senior Software Engineer
+      Company: Western Union
+      Location: Atlanta, Georgia, United States
+      Employment Type: FULL_TIME
+      Remote Type: Hybrid
+      Salary: $120,000 - $150,000
+      Experience Level: 2-5
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.0000 (0.0%)
+      - Embedding Similarity: 0.2889
+      - Preference Bonus: +0.000
+      Filters Failed:
+        ! User seeking internship but job is FULL_TIME
+        ! Requires visa sponsorship but job doesn't offer it
+      Apply URL: https://westernunion.wd5.myworkdayjobs.com/WesternUnionJobs/job/USA-GA---Atlanta...
+
+  #3. Software Engineer Intern
+      Company: Premier Inc.
+      Location: Charlotte, North Carolina, United States
+      Employment Type: FULL_TIME, INTERN
+      Remote Type: On-site
+      Salary: $52,000 - $78,000
+      Experience Level: 0-2
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.0000 (0.0%)
+      - Embedding Similarity: 0.4016
+      - Preference Bonus: +0.000
+      Filters Failed:
+        ! Requires visa sponsorship but job doesn't offer it
+      Apply URL: https://premierinc.wd1.myworkdayjobs.com/External_Professional/job/Charlotte-NC/...
+
+  #4. Senior Software Engineer
+      Company: Walmart
+      Location: United States
+      Employment Type: FULL_TIME
+      Remote Type: On-site
+      Salary: $187,741 - $234,000
+      Experience Level: 2-5
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.0000 (0.0%)
+      - Embedding Similarity: 0.2810
+      - Preference Bonus: +0.000
+      Filters Failed:
+        ! User seeking internship but job is FULL_TIME
+        ! Requires visa sponsorship but job doesn't offer it
+      Apply URL: https://walmart.wd5.myworkdayjobs.com/Non-WorkdayInternal/job/USA-Crossman-Respe...
+
+  #5. Sr. Software Engineer (Full-Stack: Java/SpringBoot, React, DevOps, Cloud)
+      Company: U.S. Bank
+      Location: Atlanta, Georgia, United States
+      Employment Type: FULL_TIME
+      Remote Type: Hybrid
+      Salary: $119,765 - $140,900
+      Experience Level: 5-10
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.0000 (0.0%)
+      - Embedding Similarity: 0.3251
+      - Preference Bonus: +0.000
+      Filters Failed:
+        ! User seeking internship but job is FULL_TIME
+        ! Requires visa sponsorship but job doesn't offer it
+      Apply URL: https://usbank.wd1.myworkdayjobs.com/US_Bank_Careers/job/Irving-TX/Sr-Software-E...
+
+================================================================================
+
+USER 5: Marcus Kim
+--------------------------------------------------------------------------------
+
+PROFILE:
+  Name: Marcus Kim
+  Email: marcus.kim@jobify-test.com
+  Target Role: Senior Backend Engineer
+  Target Type: full_time
+  Experience Level: senior
+  Remote Preference: remote
+  Preferred Locations: Remote, Portland, OR, Seattle, WA
+  Min Salary: $180,000
+  Needs Visa Sponsorship: No
+  Top Skills: Go, Python, Kubernetes, Docker, gRPC, PostgreSQL, Redis, Kafka...
+  Excluded Companies: Amazon, Oracle
+  Preferred Companies: Datadog, HashiCorp, Cloudflare
+
+TOP 5 JOB MATCHES:
+
+  #1. Senior Software Engineer - Database Platform
+      Company: New Relic
+      Location: Portland, Oregon, United States
+      Employment Type: FULL_TIME
+      Remote Type: Remote OK
+      Salary: $152,000 - $190,000
+      Experience Level: 5-10
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.6620 (66.2%)
+      Score Breakdown:
+        - Embedding (50%): 0.312
+        - Bonuses: +0.350
+        - Penalties: -0.000
+      Role Categories: user=backend, job=devops_infra
+      Matched Skills: Go, Kubernetes, PostgreSQL, Redis, AWS
+      Bonuses:
+        + Role category match: backend
+        + Skills matched: 7 skills
+        + Remote job matches preference
+        + Location: Portland, OR
+        + Partial title match: 33%
+        + Experience level match: 5-10
+      Apply URL: https://job-boards.greenhouse.io/newrelic/jobs/4991658008
+
+  #2. Principal Software Engineer, Backend Engineering 
+      Company: Red Cell Partners
+      Location: McLean, Virginia, United States
+      Employment Type: FULL_TIME
+      Remote Type: Remote OK
+      Salary: $200,000 - $300,000
+      Experience Level: 10+
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.6241 (62.4%)
+      Score Breakdown:
+        - Embedding (50%): 0.274
+        - Bonuses: +0.350
+        - Penalties: -0.000
+      Role Categories: user=backend, job=backend
+      Matched Skills: Go, Python, Kubernetes, Docker, gRPC
+      Bonuses:
+        + Role category match: backend
+        + Skills matched: 10 skills
+        + Remote job matches preference
+        + Stretch role (+1 level)
+        + Salary floor meets expectations
+      Apply URL: https://job-boards.greenhouse.io/redcellpartners/jobs/5018424007
+
+  #3. Senior Software Engineer, Backend Engineering
+      Company: Red Cell Partners
+      Location: United States
+      Employment Type: FULL_TIME
+      Remote Type: Remote Solely
+      Salary: $175,000 - $225,000
+      Experience Level: 5-10
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.6240 (62.4%)
+      Score Breakdown:
+        - Embedding (50%): 0.274
+        - Bonuses: +0.350
+        - Penalties: -0.000
+      Role Categories: user=backend, job=backend
+      Matched Skills: Go, Python, gRPC, AWS, GCP
+      Bonuses:
+        + Role category match: backend
+        + Skills matched: 7 skills
+        + Remote job matches preference
+        + Partial title match: 33%
+        + Experience level match: 5-10
+        + Salary range has good potential
+      Apply URL: https://job-boards.greenhouse.io/redcellpartners/jobs/5018435007
+
+  #4. Principal Software Engineer, Backend Engineering (Seattle, WA or McLean, VA or Remote)
+      Company: Trase Systems
+      Location: McLean, Virginia, United States
+      Employment Type: FULL_TIME
+      Remote Type: Remote OK
+      Salary: $200,000 - $300,000
+      Experience Level: 10+
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.6134 (61.3%)
+      Score Breakdown:
+        - Embedding (50%): 0.263
+        - Bonuses: +0.350
+        - Penalties: -0.000
+      Role Categories: user=backend, job=backend
+      Matched Skills: Go, Python, Kubernetes, Docker, gRPC
+      Bonuses:
+        + Role category match: backend
+        + Skills matched: 10 skills
+        + Remote job matches preference
+        + Stretch role (+1 level)
+        + Salary floor meets expectations
+      Apply URL: https://job-boards.greenhouse.io/trase/jobs/5018428007
+
+  #5. Senior Software Engineer, Backend Engineering
+      Company: Trase Systems
+      Location: United States
+      Employment Type: FULL_TIME
+      Remote Type: Remote Solely
+      Salary: $175,000 - $225,000
+      Experience Level: 5-10
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.6119 (61.2%)
+      Score Breakdown:
+        - Embedding (50%): 0.262
+        - Bonuses: +0.350
+        - Penalties: -0.000
+      Role Categories: user=backend, job=backend
+      Matched Skills: Go, Python, gRPC, AWS, GCP
+      Bonuses:
+        + Role category match: backend
+        + Skills matched: 7 skills
+        + Remote job matches preference
+        + Partial title match: 33%
+        + Experience level match: 5-10
+        + Salary range has good potential
+      Apply URL: https://job-boards.greenhouse.io/trase/jobs/5018440007
+
+================================================================================
+
+USER 6: Alex Chen
+--------------------------------------------------------------------------------
+
+PROFILE:
+  Name: Alex Chen
+  Email: alex.chen@jobify-test.com
+  Target Role: Software Engineer
+  Target Type: full_time
+  Experience Level: mid-level
+  Remote Preference: hybrid
+  Preferred Locations: San Francisco, CA, Seattle, WA, Austin, TX
+  Min Salary: $120,000
+  Needs Visa Sponsorship: No
+  Top Skills: Python, JavaScript, TypeScript, React, Node.js, PostgreSQL, AWS, Docker...
+  Excluded Companies: Meta, Amazon
+  Preferred Companies: Stripe, Notion, Linear
+
+TOP 5 JOB MATCHES:
+
+  #1. Software Engineer I
+      Company: Typeface
+      Location: Bellevue, Washington, United States
+      Employment Type: FULL_TIME
+      Remote Type: Hybrid
+      Salary: $125,000 - $140,000
+      Experience Level: 2-5
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.6146 (61.5%)
+      Score Breakdown:
+        - Embedding (50%): 0.265
+        - Bonuses: +0.350
+        - Penalties: -0.000
+      Role Categories: user=general, job=ml_ai
+      Matched Skills: Python, JavaScript, React, AWS
+      Bonuses:
+        + Skills matched: 4 skills
+        + Hybrid job matches preference
+        + Metro area match: Seattle, WA area
+        + Title similarity: 100%
+        + Experience level match: 2-5
+        + Salary floor meets expectations
+      Apply URL: https://job-boards.greenhouse.io/typeface/jobs/4982116007
+
+  #2. Software Engineer II
+      Company: Typeface
+      Location: Bellevue, Washington, United States
+      Employment Type: FULL_TIME
+      Remote Type: Hybrid
+      Salary: $161,000 - $184,000
+      Experience Level: 2-5
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.6098 (61.0%)
+      Score Breakdown:
+        - Embedding (50%): 0.260
+        - Bonuses: +0.350
+        - Penalties: -0.000
+      Role Categories: user=general, job=ml_ai
+      Matched Skills: Python, JavaScript, React, AWS
+      Bonuses:
+        + Skills matched: 4 skills
+        + Hybrid job matches preference
+        + Metro area match: Seattle, WA area
+        + Title similarity: 100%
+        + Experience level match: 2-5
+        + Salary floor meets expectations
+      Apply URL: https://job-boards.greenhouse.io/typeface/jobs/4968846007
+
+  #3. Software Engineer II, Frontend
+      Company: Crunchyroll, LLC
+      Location: San Francisco, California, United States
+      Employment Type: FULL_TIME
+      Remote Type: Hybrid
+      Salary: $135,000 - $169,000
+      Experience Level: 2-5
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.6052 (60.5%)
+      Score Breakdown:
+        - Embedding (50%): 0.255
+        - Bonuses: +0.350
+        - Penalties: -0.000
+      Role Categories: user=general, job=frontend
+      Matched Skills: JavaScript, TypeScript, React, AWS, Agile
+      Bonuses:
+        + Skills matched: 5 skills
+        + Hybrid job matches preference
+        + Location: San Francisco, CA
+        + Title similarity: 50%
+        + Experience level match: 2-5
+        + Salary floor meets expectations
+      Apply URL: https://boards.greenhouse.io/crunchyroll/jobs/7262899?gh_jid=7262899
+
+  #4. Software Engineer, Platform
+      Company: Pallet
+      Location: San Francisco, California, United States
+      Employment Type: FULL_TIME
+      Remote Type: Hybrid
+      Salary: $195,000 - $265,000
+      Experience Level: 2-5
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.5875 (58.8%)
+      Score Breakdown:
+        - Embedding (50%): 0.266
+        - Bonuses: +0.322
+        - Penalties: -0.000
+      Role Categories: user=general, job=devops_infra
+      Matched Skills: TypeScript, React, Node.js, PostgreSQL, REST APIs
+      Bonuses:
+        + Skills matched: 6 skills
+        + Hybrid job matches preference
+        + Location: San Francisco, CA
+        + Partial title match: 25%
+        + Experience level match: 2-5
+        + Salary floor meets expectations
+      Apply URL: https://job-boards.greenhouse.io/pallet/jobs/5018586007
+
+  #5. Software Engineer II - LRX Core
+      Company: Crunchyroll, LLC
+      Location: San Francisco, California, United States
+      Employment Type: FULL_TIME
+      Remote Type: Hybrid
+      Salary: $135,000 - $169,000
+      Experience Level: 2-5
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.5838 (58.4%)
+      Score Breakdown:
+        - Embedding (50%): 0.234
+        - Bonuses: +0.350
+        - Penalties: -0.000
+      Role Categories: user=general, job=frontend
+      Matched Skills: JavaScript, TypeScript, React, Agile
+      Bonuses:
+        + Skills matched: 4 skills
+        + Hybrid job matches preference
+        + Location: San Francisco, CA
+        + Title similarity: 50%
+        + Experience level match: 2-5
+        + Salary floor meets expectations
+      Apply URL: https://boards.greenhouse.io/crunchyroll/jobs/7569508?gh_jid=7569508
+
+================================================================================
+
+USER 7: Jordan Williams
+--------------------------------------------------------------------------------
+
+PROFILE:
+  Name: Jordan Williams
+  Email: jordan.williams@jobify-test.com
+  Target Role: Software Engineering Intern
+  Target Type: internship
+  Experience Level: entry
+  Remote Preference: any
+  Preferred Locations: New York, NY, Boston, MA, Remote
+  Min Salary: $40
+  Needs Visa Sponsorship: No
+  Top Skills: Java, Spring Boot, Python, JavaScript, React, SQL, Git, REST APIs...
+  Preferred Companies: Google, Microsoft, Bloomberg
+
+TOP 5 JOB MATCHES:
+
+  #1. Software Engineer Intern
+      Company: Premier Inc.
+      Location: Charlotte, North Carolina, United States
+      Employment Type: FULL_TIME, INTERN
+      Remote Type: On-site
+      Salary: $52,000 - $78,000
+      Experience Level: 0-2
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.5169 (51.7%)
+      Score Breakdown:
+        - Embedding (50%): 0.276
+        - Bonuses: +0.241
+        - Penalties: -0.000
+      Role Categories: user=general, job=data_science
+      Matched Skills: Java, SQL, Git
+      Bonuses:
+        + Skills matched: 3 skills
+        + Title similarity: 50%
+        + Experience level match: 0-2
+        + Salary floor meets expectations
+      Apply URL: https://premierinc.wd1.myworkdayjobs.com/External_Professional/job/Charlotte-NC/...
+
+  #2. Intern - IT Software Engineer, EA EPS
+      Company: Micron Technology
+      Location: United States
+      Employment Type: INTERN
+      Remote Type: On-site
+      Experience Level: 0-2
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.3895 (39.0%)
+      Score Breakdown:
+        - Embedding (50%): 0.251
+        - Bonuses: +0.139
+        - Penalties: -0.000
+      Role Categories: user=general, job=data_science
+      Matched Skills: Java, Python, SQL
+      Bonuses:
+        + Skills matched: 3 skills
+        + Partial title match: 29%
+        + Experience level match: 0-2
+      Apply URL: https://micron.wd1.myworkdayjobs.com/External/job/Boise-ID---Main-Site/Intern---...
+
+  #3. Embedded Software Engineer Intern - 2026 Summer Internship
+      Company: Motorola Solutions
+      Location: Fresno, California, United States
+      Employment Type: INTERN
+      Remote Type: Hybrid
+      Experience Level: 0-2
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.3611 (36.1%)
+      Score Breakdown:
+        - Embedding (50%): 0.249
+        - Bonuses: +0.112
+        - Penalties: -0.000
+      Role Categories: user=general, job=embedded
+      Matched Skills: Python
+      Bonuses:
+        + Skills matched: 1 skills
+        + Partial title match: 25%
+        + Experience level match: 0-2
+      Apply URL: https://motorolasolutions.wd5.myworkdayjobs.com/Careers/job/Fresno-CA-CA180/Embe...
+
+  #4. Senior Software Engineer
+      Company: Red River
+      Location: Boston, Massachusetts, United States
+      Employment Type: FULL_TIME
+      Remote Type: Remote OK
+      Salary: $133,650 - $220,680
+      Experience Level: 10+
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.0000 (0.0%)
+      - Embedding Similarity: 0.4925
+      - Preference Bonus: +0.000
+      Filters Failed:
+        ! User seeking internship but job is FULL_TIME
+      Apply URL: https://redhat.wd5.myworkdayjobs.com/Jobs/job/Boston/Senior-Software-Engineer_R-...
+
+  #5. Senior Software Engineer
+      Company: Western Union
+      Location: Atlanta, Georgia, United States
+      Employment Type: FULL_TIME
+      Remote Type: Hybrid
+      Salary: $120,000 - $150,000
+      Experience Level: 2-5
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.0000 (0.0%)
+      - Embedding Similarity: 0.4022
+      - Preference Bonus: +0.000
+      Filters Failed:
+        ! User seeking internship but job is FULL_TIME
+      Apply URL: https://westernunion.wd5.myworkdayjobs.com/WesternUnionJobs/job/USA-GA---Atlanta...
+
+================================================================================
+
+USER 8: Kai Tanaka
+--------------------------------------------------------------------------------
+
+PROFILE:
+  Name: Kai Tanaka
+  Email: kai.tanaka@jobify-test.com
+  Target Role: Data Scientist
+  Target Type: full_time
+  Experience Level: mid-level
+  Remote Preference: remote
+  Preferred Locations: Seattle, WA, Portland, OR, Remote
+  Min Salary: $130,000
+  Needs Visa Sponsorship: No
+  Top Skills: Python, R, SQL, Pandas, NumPy, Scikit-learn, Statistics, A/B Testing...
+  Excluded Companies: Amazon
+  Preferred Companies: Airbnb, Netflix, Spotify
+
+TOP 5 JOB MATCHES:
+
+  #1. Software Engineer, Stats & Analytics
+      Company: StackAdapt
+      Location: Canada
+      Employment Type: FULL_TIME
+      Remote Type: Remote OK
+      Experience Level: 2-5
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.5749 (57.5%)
+      Score Breakdown:
+        - Embedding (50%): 0.267
+        - Bonuses: +0.308
+        - Penalties: -0.000
+      Role Categories: user=data_science, job=data_science
+      Matched Skills: R, SQL, Power BI, Machine Learning
+      Bonuses:
+        + Role category match: data_science
+        + Skills matched: 4 skills
+        + Remote job matches preference
+        + Experience level match: 2-5
+      Apply URL: https://job-boards.greenhouse.io/stackadapt/jobs/4113972009
+
+  #2. Software Engineer II
+      Company: Typeface
+      Location: Bellevue, Washington, United States
+      Employment Type: FULL_TIME
+      Remote Type: Hybrid
+      Salary: $161,000 - $184,000
+      Experience Level: 2-5
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.5056 (50.6%)
+      Score Breakdown:
+        - Embedding (50%): 0.228
+        - Bonuses: +0.278
+        - Penalties: -0.000
+      Role Categories: user=data_science, job=ml_ai
+      Matched Skills: Python, R, SQL, Power BI
+      Bonuses:
+        + Role category match: data_science
+        + Skills matched: 4 skills
+        + Metro area match: Seattle, WA area
+        + Experience level match: 2-5
+        + Salary floor meets expectations
+      Apply URL: https://job-boards.greenhouse.io/typeface/jobs/4968846007
+
+  #3. Software Engineer
+      Company: GoDaddy
+      Location: United States
+      Employment Type: FULL_TIME
+      Remote Type: Remote Solely
+      Experience Level: 2-5
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.4861 (48.6%)
+      Score Breakdown:
+        - Embedding (50%): 0.202
+        - Bonuses: +0.284
+        - Penalties: -0.000
+      Role Categories: user=data_science, job=data_science
+      Matched Skills: R, Power BI
+      Bonuses:
+        + Role category match: data_science
+        + Skills matched: 2 skills
+        + Remote job matches preference
+        + Experience level match: 2-5
+      Apply URL: https://careers.godaddy/jobs?gh_jid=7561559003
+
+  #4. Software Engineer, macOS Core Product - Vancouver, USA
+      Company: Speechify
+      Location: Vancouver, Washington, United States
+      Employment Type: FULL_TIME
+      Remote Type: Remote Solely
+      Salary: $140,000 - $200,000
+      Experience Level: 2-5
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.4766 (47.7%)
+      Score Breakdown:
+        - Embedding (50%): 0.205
+        - Bonuses: +0.272
+        - Penalties: -0.000
+      Role Categories: user=data_science, job=research
+      Matched Skills: R
+      Bonuses:
+        + Role category match: data_science
+        + Skills matched: 1 skills
+        + Remote job matches preference
+        + Experience level match: 2-5
+        + Salary floor meets expectations
+      Apply URL: https://job-boards.greenhouse.io/speechify/jobs/5754674004
+
+  #5. Software Engineer, macOS Core Product - Pittsburgh, USA
+      Company: Speechify
+      Location: Pittsburgh, Pennsylvania, United States
+      Employment Type: FULL_TIME
+      Remote Type: Remote Solely
+      Salary: $140,000 - $200,000
+      Experience Level: 2-5
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.4696 (47.0%)
+      Score Breakdown:
+        - Embedding (50%): 0.198
+        - Bonuses: +0.272
+        - Penalties: -0.000
+      Role Categories: user=data_science, job=research
+      Matched Skills: R
+      Bonuses:
+        + Role category match: data_science
+        + Skills matched: 1 skills
+        + Remote job matches preference
+        + Experience level match: 2-5
+        + Salary floor meets expectations
+      Apply URL: https://job-boards.greenhouse.io/speechify/jobs/5754721004
+
+================================================================================
+
+USER 9: Elena Volkov
+--------------------------------------------------------------------------------
+
+PROFILE:
+  Name: Elena Volkov
+  Email: elena.volkov@jobify-test.com
+  Target Role: AI Research Scientist
+  Target Type: full_time
+  Experience Level: senior
+  Remote Preference: hybrid
+  Preferred Locations: San Francisco Bay Area, Seattle, WA, New York, NY
+  Min Salary: $220,000
+  Needs Visa Sponsorship: No
+  Top Skills: NLP, Transformers, Large Language Models, Python, PyTorch, Deep Learning, Research, Academic Writing...
+  Preferred Companies: Anthropic, Google DeepMind, Meta AI
+
+TOP 5 JOB MATCHES:
+
+  #1. Principal Software Engineer
+      Company: Typeface
+      Location: Bellevue, Washington, United States
+      Employment Type: FULL_TIME
+      Remote Type: Hybrid
+      Salary: $247,500 - $267,000
+      Experience Level: 10+
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.4765 (47.6%)
+      Score Breakdown:
+        - Embedding (50%): 0.222
+        - Bonuses: +0.254
+        - Penalties: -0.000
+      Role Categories: user=research, job=ml_ai
+      Matched Skills: Prompt Engineering, Fine-tuning
+      Bonuses:
+        + Role category match: research
+        + Skills matched: 2 skills
+        + Hybrid job matches preference
+        + Metro area match: Seattle, WA area
+        + Stretch role (+1 level)
+        + Salary floor meets expectations
+      Apply URL: https://job-boards.greenhouse.io/typeface/jobs/5037370007
+
+  #2. Senior Software Engineer – AI Applications
+      Company: Bezos Academy
+      Location: Seattle, Washington, United States
+      Employment Type: FULL_TIME
+      Remote Type: On-site
+      Salary: $161,000 - $255,000
+      Experience Level: 10+
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.4519 (45.2%)
+      Score Breakdown:
+        - Embedding (50%): 0.250
+        - Bonuses: +0.202
+        - Penalties: -0.000
+      Role Categories: user=research, job=ml_ai
+      Matched Skills: Large Language Models, Python, PyTorch, Deep Learning, Research
+      Bonuses:
+        + Role category match: research
+        + Skills matched: 6 skills
+        + Metro area match: Seattle, WA area
+        + Stretch role (+1 level)
+      Apply URL: https://job-boards.greenhouse.io/day1academies/jobs/8365329002
+
+  #3. Staff Software Engineer - AI Growth Lead
+      Company: Coinbase Careers Page
+      Location: United States
+      Employment Type: FULL_TIME
+      Remote Type: Hybrid
+      Salary: $218,025 - $256,500
+      Experience Level: 10+
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.4269 (42.7%)
+      Score Breakdown:
+        - Embedding (50%): 0.225
+        - Bonuses: +0.202
+        - Penalties: -0.000
+      Role Categories: user=research, job=ml_ai
+      Matched Skills: Large Language Models, Python, Deep Learning, Research, Prompt Engineering
+      Bonuses:
+        + Role category match: research
+        + Skills matched: 6 skills
+        + Hybrid job matches preference
+        + Stretch role (+1 level)
+      Apply URL: https://www.coinbase.com/careers/positions/7575042?gh_jid=7575042
+
+  #4. Senior Software Engineer (Python + AI)
+      Company: Exadel Inc (Website)
+      Location: Sofia, Sofia-City, Bulgaria
+      Employment Type: FULL_TIME
+      Remote Type: Hybrid
+      Experience Level: 5-10
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.4181 (41.8%)
+      Score Breakdown:
+        - Embedding (50%): 0.214
+        - Bonuses: +0.204
+        - Penalties: -0.000
+      Role Categories: user=research, job=ml_ai
+      Matched Skills: Large Language Models, Python
+      Bonuses:
+        + Role category match: research
+        + Skills matched: 2 skills
+        + Hybrid job matches preference
+        + Experience level match: 5-10
+      Apply URL: https://job-boards.greenhouse.io/exadelinc/jobs/5783762004
+
+  #5. Software Engineer, Product
+      Company: Pallet
+      Location: San Francisco, California, United States
+      Employment Type: FULL_TIME
+      Remote Type: On-site
+      Salary: $175,000 - $265,000
+      Experience Level: 5-10
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.4176 (41.8%)
+      Score Breakdown:
+        - Embedding (50%): 0.196
+        - Bonuses: +0.222
+        - Penalties: -0.000
+      Role Categories: user=research, job=ml_ai
+      Matched Skills: Deep Learning
+      Bonuses:
+        + Role category match: research
+        + Skills matched: 1 skills
+        + Metro area match: San Francisco Bay Area area
+        + Experience level match: 5-10
+        + Salary range has good potential
+      Apply URL: https://job-boards.greenhouse.io/pallet/jobs/5018592007
+
+================================================================================
+
+USER 10: David Okonkwo
+--------------------------------------------------------------------------------
+
+PROFILE:
+  Name: David Okonkwo
+  Email: david.okonkwo@jobify-test.com
+  Target Role: Full Stack Software Engineering Intern
+  Target Type: internship
+  Experience Level: entry
+  Remote Preference: hybrid
+  Preferred Locations: Atlanta, GA, Austin, TX, Remote
+  Min Salary: $35
+  Needs Visa Sponsorship: No
+  Top Skills: JavaScript, TypeScript, React, Node.js, Express, MongoDB, PostgreSQL, Git...
+  Preferred Companies: Google, Microsoft, Stripe, Coinbase
+
+TOP 5 JOB MATCHES:
+
+  #1. Software Engineer Intern
+      Company: Premier Inc.
+      Location: Charlotte, North Carolina, United States
+      Employment Type: FULL_TIME, INTERN
+      Remote Type: On-site
+      Salary: $52,000 - $78,000
+      Experience Level: 0-2
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.3680 (36.8%)
+      Score Breakdown:
+        - Embedding (50%): 0.267
+        - Bonuses: +0.181
+        - Penalties: -0.080
+      Role Categories: user=fullstack, job=data_science
+      Matched Skills: Express, Git
+      Bonuses:
+        + Skills matched: 2 skills
+        + Partial title match: 33%
+        + Experience level match: 0-2
+        + Salary floor meets expectations
+      Penalties:
+        - Role mismatch: user wants fullstack, job is data_science
+      Apply URL: https://premierinc.wd1.myworkdayjobs.com/External_Professional/job/Charlotte-NC/...
+
+  #2. Embedded Software Engineer Intern - 2026 Summer Internship
+      Company: Motorola Solutions
+      Location: Fresno, California, United States
+      Employment Type: INTERN
+      Remote Type: Hybrid
+      Experience Level: 0-2
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.2820 (28.2%)
+      Score Breakdown:
+        - Embedding (50%): 0.232
+        - Bonuses: +0.130
+        - Penalties: -0.080
+      Role Categories: user=fullstack, job=embedded
+      Bonuses:
+        + Hybrid job matches preference
+        + Experience level match: 0-2
+      Penalties:
+        - Role mismatch: user wants fullstack, job is embedded
+      Apply URL: https://motorolasolutions.wd5.myworkdayjobs.com/Careers/job/Fresno-CA-CA180/Embe...
+
+  #3. Intern - IT Software Engineer, EA EPS
+      Company: Micron Technology
+      Location: United States
+      Employment Type: INTERN
+      Remote Type: On-site
+      Experience Level: 0-2
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.2604 (26.0%)
+      Score Breakdown:
+        - Embedding (50%): 0.260
+        - Bonuses: +0.080
+        - Penalties: -0.080
+      Role Categories: user=fullstack, job=data_science
+      Bonuses:
+        + Experience level match: 0-2
+      Penalties:
+        - Role mismatch: user wants fullstack, job is data_science
+      Apply URL: https://micron.wd1.myworkdayjobs.com/External/job/Boise-ID---Main-Site/Intern---...
+
+  #4. Senior Software Engineer
+      Company: Red River
+      Location: Boston, Massachusetts, United States
+      Employment Type: FULL_TIME
+      Remote Type: Remote OK
+      Salary: $133,650 - $220,680
+      Experience Level: 10+
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.0000 (0.0%)
+      - Embedding Similarity: 0.4624
+      - Preference Bonus: +0.000
+      Filters Failed:
+        ! User seeking internship but job is FULL_TIME
+      Apply URL: https://redhat.wd5.myworkdayjobs.com/Jobs/job/Boston/Senior-Software-Engineer_R-...
+
+  #5. Senior Software Engineer
+      Company: Western Union
+      Location: Atlanta, Georgia, United States
+      Employment Type: FULL_TIME
+      Remote Type: Hybrid
+      Salary: $120,000 - $150,000
+      Experience Level: 2-5
+      Visa Sponsorship: No
+      
+      MATCH SCORE: 0.0000 (0.0%)
+      - Embedding Similarity: 0.4703
+      - Preference Bonus: +0.000
+      Filters Failed:
+        ! User seeking internship but job is FULL_TIME
+      Apply URL: https://westernunion.wd5.myworkdayjobs.com/WesternUnionJobs/job/USA-GA---Atlanta...
+
+================================================================================

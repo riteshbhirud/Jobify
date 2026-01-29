@@ -66,26 +66,272 @@ def cosine_similarity(vec1, vec2) -> float:
     return dot_product / (magnitude1 * magnitude2)
 
 
-def calculate_match_score(job: Dict, user: Dict, similarity: float) -> tuple[float, Dict]:
+# Metro area mappings for location expansion
+METRO_AREAS = {
+    "sf bay area": ["san francisco", "san jose", "oakland", "palo alto", "mountain view",
+                   "sunnyvale", "santa clara", "fremont", "redwood city", "menlo park",
+                   "cupertino", "berkeley", "san mateo", "hayward", "south san francisco"],
+    "nyc metro": ["new york", "manhattan", "brooklyn", "queens", "jersey city",
+                  "hoboken", "newark", "stamford"],
+    "la metro": ["los angeles", "santa monica", "pasadena", "burbank", "long beach",
+                 "glendale", "culver city", "irvine", "anaheim"],
+    "seattle metro": ["seattle", "bellevue", "redmond", "kirkland", "tacoma"],
+    "boston metro": ["boston", "cambridge", "somerville", "brookline", "quincy"],
+    "chicago metro": ["chicago", "evanston", "oak park", "naperville", "schaumburg"],
+    "dc metro": ["washington", "arlington", "alexandria", "bethesda", "silver spring"],
+    "austin metro": ["austin", "round rock", "cedar park", "georgetown"],
+    "denver metro": ["denver", "boulder", "aurora", "lakewood", "littleton"],
+}
+
+# Experience level ordering for comparison (unified for both user and job formats)
+EXPERIENCE_LEVELS = {
+    # User profile formats
+    "entry": 0,
+    "junior": 1,
+    "mid": 2,
+    "mid-level": 2,
+    "senior": 3,
+    "lead": 4,
+    "principal": 5,
+    "staff": 5,
+    "director": 6,
+    "executive": 7,
+    # Job listing formats (years of experience)
+    "0-2": 0,      # Entry level
+    "2-5": 2,      # Mid level
+    "5-10": 3,     # Senior level
+    "10+": 4,      # Lead/Principal level
+}
+
+# Role categories for matching specializations
+ROLE_CATEGORIES = {
+    "ml_ai": [
+        "machine learning", "ml engineer", "deep learning", "artificial intelligence",
+        "ai engineer", "nlp", "computer vision", "neural network", "llm", "generative ai"
+    ],
+    "data_science": [
+        "data scientist", "data science", "data analyst", "analytics", "statistician",
+        "business intelligence", "bi analyst"
+    ],
+    "research": [
+        "research scientist", "research engineer", "researcher", "applied scientist",
+        "research intern"
+    ],
+    "frontend": [
+        "frontend", "front-end", "front end", "ui engineer", "ui developer",
+        "react developer", "vue developer", "angular developer"
+    ],
+    "backend": [
+        "backend", "back-end", "back end", "server engineer", "api engineer",
+        "platform engineer", "infrastructure engineer"
+    ],
+    "fullstack": [
+        "full stack", "fullstack", "full-stack"
+    ],
+    "devops_infra": [
+        "devops", "sre", "site reliability", "infrastructure", "platform",
+        "cloud engineer", "systems engineer"
+    ],
+    "mobile": [
+        "mobile engineer", "ios engineer", "android engineer", "mobile developer"
+    ],
+    "embedded": [
+        "embedded", "firmware", "hardware engineer", "systems programming"
+    ],
+    "security": [
+        "security engineer", "cybersecurity", "appsec", "infosec"
+    ],
+}
+
+
+def get_role_category(text: str) -> Optional[str]:
+    """Determine the role category from title or description text."""
+    if not text:
+        return None
+    text_lower = text.lower()
+    for category, keywords in ROLE_CATEGORIES.items():
+        if any(kw in text_lower for kw in keywords):
+            return category
+    return "general"
+
+
+def calculate_skill_match(user_skills: List[str], job_description: str, job_title: str) -> tuple[float, List[str]]:
+    """
+    Calculate how many user skills appear in the job posting.
+    Returns (score, list of matched skills).
+    """
+    if not user_skills:
+        return 0.0, []
+
+    # Combine job title and description for matching
+    job_text = f"{job_title} {job_description}".lower() if job_description else job_title.lower()
+
+    matched_skills = []
+    for skill in user_skills:
+        skill_lower = skill.lower()
+        # Check for exact match or common variations
+        if skill_lower in job_text:
+            matched_skills.append(skill)
+        # Handle multi-word skills
+        elif len(skill_lower.split()) > 1 and all(word in job_text for word in skill_lower.split()):
+            matched_skills.append(skill)
+
+    # Score based on percentage of skills matched (max 10% bonus)
+    match_ratio = len(matched_skills) / min(len(user_skills), 10)  # Cap at 10 skills
+    score = min(match_ratio * 0.12, 0.10)  # Max 10% bonus
+
+    return score, matched_skills
+
+
+def calculate_role_category_match(
+    job_title: str,
+    job_description: str,
+    user_target_role: str,
+    user_skills: List[str]
+) -> tuple[float, str, str, bool]:
+    """
+    Compare role categories between job and user preference.
+    Returns (score_adjustment, job_category, user_category, is_match).
+
+    - Strong match: +10% bonus
+    - Mismatch: -8% penalty
+    - Unknown/general: no adjustment
+    """
+    # Determine job category
+    job_category = get_role_category(job_title)
+    if job_category == "general" and job_description:
+        job_category = get_role_category(job_description)
+
+    # Determine user's target category
+    user_category = get_role_category(user_target_role)
+    if user_category == "general" and user_skills:
+        # Infer from skills
+        skills_text = " ".join(user_skills)
+        user_category = get_role_category(skills_text)
+
+    # Both general = no adjustment
+    if job_category == "general" or user_category == "general":
+        return 0.0, job_category or "general", user_category or "general", True
+
+    # Exact match = bonus
+    if job_category == user_category:
+        return 0.10, job_category, user_category, True
+
+    # Related categories (partial match)
+    related_pairs = [
+        ("ml_ai", "data_science"),
+        ("ml_ai", "research"),
+        ("data_science", "research"),
+        ("frontend", "fullstack"),
+        ("backend", "fullstack"),
+        ("backend", "devops_infra"),
+    ]
+    for pair in related_pairs:
+        if (job_category in pair and user_category in pair):
+            return 0.05, job_category, user_category, True  # Partial match
+
+    # Mismatch = penalty
+    return -0.08, job_category, user_category, False
+
+
+def normalize_experience_level(level: str) -> int:
+    """Convert experience level string to numeric value for comparison."""
+    if not level:
+        return 2  # Default to mid-level if unknown
+    level_lower = level.lower().strip()
+    return EXPERIENCE_LEVELS.get(level_lower, 2)
+
+
+def get_metro_area_matches(location: str) -> list:
+    """Get all cities that match a given location (including metro area expansion)."""
+    location_lower = location.lower()
+    matches = [location_lower]
+
+    # Check if location is in a metro area
+    for metro, cities in METRO_AREAS.items():
+        if any(city in location_lower for city in cities):
+            matches.extend(cities)
+            break
+
+    return list(set(matches))
+
+
+def calculate_title_similarity(job_title: str, target_role: str) -> float:
+    """Calculate similarity between job title and user's target role."""
+    if not job_title or not target_role:
+        return 0.0
+
+    job_words = set(job_title.lower().replace("-", " ").split())
+    target_words = set(target_role.lower().replace("-", " ").split())
+
+    # Remove common filler words
+    filler_words = {"the", "a", "an", "and", "or", "of", "for", "at", "in", "to", "i", "ii", "iii", "iv", "v"}
+    job_words -= filler_words
+    target_words -= filler_words
+
+    if not job_words or not target_words:
+        return 0.0
+
+    # Calculate Jaccard similarity
+    intersection = len(job_words & target_words)
+    union = len(job_words | target_words)
+
+    return intersection / union if union > 0 else 0.0
+
+
+def calculate_match_score(
+    job: Dict,
+    user: Dict,
+    similarity: float,
+    user_skills: Optional[List[str]] = None
+) -> tuple[float, Dict]:
     """
     Calculate comprehensive match score between job and user.
     Returns (score, reasons).
+
+    Scoring breakdown:
+    - Embedding similarity: 50% weight (semantic match)
+    - Role category match: up to 10% bonus / -8% penalty
+    - Skill match: up to 10% bonus
+    - Preference bonuses: up to 20% (location, remote, company, title, salary)
+    - Experience match: up to 8% bonus / -12% penalty
+    - Hard filters eliminate jobs entirely (return 0)
     """
     reasons = {
         "embedding_similarity": round(similarity, 3),
         "filters_passed": [],
         "filters_failed": [],
-        "preference_matches": []
+        "preference_matches": [],
+        "penalties": [],
+        "bonuses": {}
     }
 
     filters_passed = True
+
+    # ============== HARD FILTERS ==============
+
+    # Job type check (internship vs full_time)
+    user_target_type = user.get("target_type", "both")
+    job_employment_type = (job.get("employment_type") or "").upper()
+
+    if user_target_type == "internship":
+        # User wants internship - job must have INTERN in employment_type
+        if "INTERN" not in job_employment_type:
+            reasons["filters_failed"].append(f"User seeking internship but job is {job_employment_type or 'unknown type'}")
+            filters_passed = False
+    elif user_target_type == "full_time":
+        # User wants full-time - job must have FULL_TIME and NOT be intern-only
+        if "FULL_TIME" not in job_employment_type or job_employment_type == "INTERN":
+            reasons["filters_failed"].append(f"User seeking full-time but job is {job_employment_type or 'unknown type'}")
+            filters_passed = False
+    # If target_type is "both", no filtering needed
 
     # Visa sponsorship check
     if user.get("needs_visa_sponsorship") and job.get("visa_sponsorship") is False:
         reasons["filters_failed"].append("Requires visa sponsorship but job doesn't offer it")
         filters_passed = False
 
-    # Minimum salary check
+    # Minimum salary check (hard filter)
     user_min_salary = user.get("min_salary")
     job_max_salary = job.get("salary_max")
     if user_min_salary and job_max_salary and job_max_salary < user_min_salary:
@@ -105,39 +351,209 @@ def calculate_match_score(job: Dict, user: Dict, similarity: float) -> tuple[flo
     if not filters_passed:
         return 0.0, reasons
 
-    # Preference bonuses
-    preference_score = 0.0
+    # ============== SOFT SCORING ==============
 
-    # Remote preference
+    preference_score = 0.0
+    penalty_score = 0.0
+
+    # ============== ROLE CATEGORY MATCHING ==============
+
+    job_title = job.get("title", "")
+    job_description = job.get("description", "")
+    user_target_role = user.get("target_role", "")
+
+    role_adjustment, job_category, user_category, role_matched = calculate_role_category_match(
+        job_title=job_title,
+        job_description=job_description,
+        user_target_role=user_target_role,
+        user_skills=user_skills or []
+    )
+
+    if role_adjustment > 0:
+        preference_score += role_adjustment
+        reasons["preference_matches"].append(f"Role category match: {user_category}")
+        reasons["bonuses"]["role_category"] = role_adjustment
+    elif role_adjustment < 0:
+        penalty_score += abs(role_adjustment)
+        reasons["penalties"].append(f"Role mismatch: user wants {user_category}, job is {job_category}")
+
+    reasons["role_category"] = {
+        "job": job_category,
+        "user": user_category,
+        "matched": role_matched
+    }
+
+    # ============== SKILL MATCHING ==============
+
+    if user_skills:
+        skill_score, matched_skills = calculate_skill_match(
+            user_skills=user_skills,
+            job_description=job_description,
+            job_title=job_title
+        )
+        if skill_score > 0:
+            preference_score += skill_score
+            reasons["preference_matches"].append(f"Skills matched: {len(matched_skills)} skills")
+            reasons["bonuses"]["skill_match"] = round(skill_score, 3)
+            reasons["matched_skills"] = matched_skills[:5]  # Top 5 for brevity
+
+    # ----- 1. Remote preference (single bonus, no double-counting) -----
     user_remote_pref = user.get("remote_preference", "any")
     job_remote_type = (job.get("remote_type") or "").lower()
-    if user_remote_pref == "remote" and "remote" in job_remote_type:
-        preference_score += 0.1
-        reasons["preference_matches"].append("Remote preference matched")
+    job_location_lower = (job.get("location") or "").lower()
+    remote_bonus_applied = False
 
-    # Preferred companies
+    is_remote_job = "remote" in job_remote_type or "remote" in job_location_lower
+
+    if user_remote_pref == "remote":
+        if is_remote_job:
+            preference_score += 0.08
+            reasons["preference_matches"].append("Remote job matches preference")
+            reasons["bonuses"]["remote_match"] = 0.08
+            remote_bonus_applied = True
+        elif "on-site" in job_remote_type or "onsite" in job_remote_type:
+            penalty_score += 0.10
+            reasons["penalties"].append("On-site only job (user prefers remote)")
+    elif user_remote_pref == "hybrid":
+        if "hybrid" in job_remote_type:
+            preference_score += 0.05
+            reasons["preference_matches"].append("Hybrid job matches preference")
+            reasons["bonuses"]["hybrid_match"] = 0.05
+
+    # ----- 2. Preferred companies -----
     preferred_companies = user.get("preferred_companies") or []
     if preferred_companies and job.get("company"):
         job_company_lower = job.get("company", "").lower()
         for preferred in preferred_companies:
             if preferred.lower() in job_company_lower:
-                preference_score += 0.1
-                reasons["preference_matches"].append(f"Preferred company")
+                preference_score += 0.08
+                reasons["preference_matches"].append(f"Preferred company: {job.get('company')}")
+                reasons["bonuses"]["preferred_company"] = 0.08
                 break
 
-    # Location matching
+    # ----- 3. Location matching (skip remote bonus if already applied) -----
     user_locations = user.get("locations") or []
-    job_location = job.get("location") or ""
-    if user_locations and job_location:
+    job_location_raw = job.get("location") or ""
+    location_matched = False
+
+    # Only apply remote location bonus if not already applied via remote_preference
+    if not remote_bonus_applied:
+        user_wants_remote_location = any("remote" in loc.lower() for loc in user_locations)
+        if user_wants_remote_location and is_remote_job:
+            preference_score += 0.05
+            reasons["preference_matches"].append("Remote job (user has Remote in locations)")
+            reasons["bonuses"]["remote_location"] = 0.05
+            location_matched = True
+
+    if not location_matched and user_locations and job_location_raw:
+        job_location_lower = job_location_raw.lower()
+
         for loc in user_locations:
-            if loc.lower() in job_location.lower():
-                preference_score += 0.05
-                reasons["preference_matches"].append(f"Location matched")
+            if "remote" in loc.lower():
+                continue  # Already handled above
+
+            # Expand user location to metro area
+            metro_matches = get_metro_area_matches(loc)
+
+            for metro_city in metro_matches:
+                if metro_city in job_location_lower:
+                    preference_score += 0.05
+                    if metro_city != loc.lower():
+                        reasons["preference_matches"].append(f"Metro area match: {loc} area")
+                    else:
+                        reasons["preference_matches"].append(f"Location: {loc}")
+                    reasons["bonuses"]["location"] = 0.05
+                    location_matched = True
+                    break
+            if location_matched:
                 break
 
-    preference_score = min(preference_score, 0.3)
-    final_score = (similarity * 0.7) + preference_score
+    # ----- 4. Job title similarity bonus (increased weight) -----
+    # Note: user_target_role and job_title already defined above in role category section
+
+    if user_target_role and job_title:
+        title_sim = calculate_title_similarity(job_title, user_target_role)
+        if title_sim >= 0.5:
+            bonus = min(title_sim * 0.15, 0.12)  # Max 12% bonus (up from 8%)
+            preference_score += bonus
+            reasons["preference_matches"].append(f"Title similarity: {title_sim:.0%}")
+            reasons["bonuses"]["title_similarity"] = round(bonus, 3)
+        elif title_sim >= 0.25:
+            bonus = title_sim * 0.08  # Increased from 0.05
+            preference_score += bonus
+            reasons["preference_matches"].append(f"Partial title match: {title_sim:.0%}")
+            reasons["bonuses"]["title_similarity"] = round(bonus, 3)
+
+    # ----- 5. Experience level match (softened penalties) -----
+    user_exp_level = user.get("experience_level", "")
+    job_exp_level = job.get("experience_level", "")
+
+    if user_exp_level and job_exp_level:
+        user_exp_num = normalize_experience_level(user_exp_level)
+        job_exp_num = normalize_experience_level(job_exp_level)
+        exp_diff = job_exp_num - user_exp_num
+
+        if exp_diff == 0:
+            # Perfect match
+            preference_score += 0.08
+            reasons["preference_matches"].append(f"Experience level match: {job_exp_level}")
+            reasons["bonuses"]["experience_match"] = 0.08
+        elif exp_diff == 1:
+            # Job is one level higher - slight stretch, small bonus
+            preference_score += 0.03
+            reasons["preference_matches"].append(f"Stretch role (+1 level)")
+            reasons["bonuses"]["experience_stretch"] = 0.03
+        elif exp_diff == -1:
+            # Job is one level lower - reduced penalty
+            penalty_score += 0.03  # Reduced from 0.05
+            reasons["penalties"].append(f"Job slightly below level ({job_exp_level} vs {user_exp_level})")
+        elif exp_diff >= 2:
+            # Job requires much more experience - graduated penalty
+            penalty = 0.06 + min((exp_diff - 2) * 0.03, 0.06)  # Max -12%
+            penalty_score += penalty
+            reasons["penalties"].append(f"Job requires more experience ({job_exp_level} vs {user_exp_level})")
+        elif exp_diff <= -2:
+            # Job is significantly below user level - graduated penalty
+            penalty = 0.05 + min((abs(exp_diff) - 2) * 0.02, 0.05)  # Max -10%
+            penalty_score += penalty
+            reasons["penalties"].append(f"Job significantly below level ({job_exp_level} vs {user_exp_level})")
+
+    # ----- 6. Salary fit bonus -----
+    job_min_salary = job.get("salary_min")
+    job_max_salary = job.get("salary_max")
+    user_min_salary = user.get("min_salary")
+
+    if user_min_salary and (job_min_salary or job_max_salary):
+        # If job min salary is >= user min, that's a good sign
+        if job_min_salary and job_min_salary >= user_min_salary:
+            preference_score += 0.05
+            reasons["preference_matches"].append("Salary floor meets expectations")
+            reasons["bonuses"]["salary_fit"] = 0.05
+        elif job_max_salary and job_max_salary >= user_min_salary * 1.2:
+            # Job max is significantly above user min - good potential
+            preference_score += 0.03
+            reasons["preference_matches"].append("Salary range has good potential")
+            reasons["bonuses"]["salary_potential"] = 0.03
+
+    # ============== FINAL SCORE CALCULATION ==============
+
+    # Cap preference bonuses (increased cap to accommodate new signals)
+    preference_score = min(preference_score, 0.35)
+
+    # Calculate final score: 50% embedding + bonuses - penalties
+    final_score = (similarity * 0.50) + preference_score - penalty_score
+
+    # Ensure score is in valid range
     final_score = max(0.0, min(1.0, final_score))
+
+    # Add summary to reasons
+    reasons["preference_bonus"] = round(preference_score, 3)
+    reasons["penalty_total"] = round(penalty_score, 3)
+    reasons["final_score_breakdown"] = {
+        "embedding_contribution": round(similarity * 0.50, 3),
+        "preference_bonus": round(preference_score, 3),
+        "penalty": round(penalty_score, 3)
+    }
 
     return final_score, reasons
 
@@ -156,6 +572,11 @@ async def match_user_to_jobs(
     if not user_embedding:
         return []
 
+    # Extract user skills for skill matching
+    user_skills = user.get("skills") or []
+    if isinstance(user_skills, str):
+        user_skills = [s.strip() for s in user_skills.split(",")]
+
     matches = []
 
     for job in jobs:
@@ -171,7 +592,9 @@ async def match_user_to_jobs(
 
         # Calculate similarity and match score
         similarity = cosine_similarity(user_embedding, job_embedding)
-        match_score, match_reasons = calculate_match_score(job, user, similarity)
+        match_score, match_reasons = calculate_match_score(
+            job, user, similarity, user_skills=user_skills
+        )
 
         if match_score >= min_score:
             matches.append({
@@ -216,11 +639,12 @@ async def run_matching_pipeline(
     supabase = get_supabase()
     logger.info("Starting matching pipeline...")
 
-    # Fetch users
+    # Fetch users (including skills and target_role for improved matching)
     users_query = supabase.table("users").select(
         "id, email, first_name, last_name, embedding, min_match_score, "
         "needs_visa_sponsorship, min_salary, excluded_companies, preferred_companies, "
-        "locations, remote_preference, experience_level, is_active"
+        "locations, remote_preference, experience_level, target_type, target_role, "
+        "skills, is_active"
     ).not_.is_("embedding", "null")
 
     if user_id:
@@ -242,11 +666,11 @@ async def run_matching_pipeline(
 
     logger.info(f"Found {len(users)} user(s) to process")
 
-    # Fetch jobs with embeddings
+    # Fetch jobs with embeddings (including description for skill matching)
     jobs_result = supabase.table("jobs").select(
-        "id, external_id, title, company, location, apply_url, "
+        "id, external_id, title, company, location, apply_url, description, "
         "salary_min, salary_max, visa_sponsorship, remote_type, "
-        "experience_level, embedding"
+        "experience_level, employment_type, embedding"
     ).not_.is_("embedding", "null").execute()
 
     jobs = jobs_result.data or []
