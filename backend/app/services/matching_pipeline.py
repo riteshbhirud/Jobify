@@ -693,11 +693,14 @@ async def run_matching_pipeline(
     for user in users:
         user_min_score = min_match_score or user.get("min_match_score", 0.3)
 
-        # Get existing applications to avoid duplicates
-        existing_result = supabase.table("applications").select("job_id").eq("user_id", user["id"]).execute()
+        # Get existing applications that were actually applied to (submitted or failed)
+        # Jobs that were only matched/queued but not applied can be re-matched
+        existing_result = supabase.table("applications").select("job_id").eq(
+            "user_id", user["id"]
+        ).in_("status", ["submitted", "failed"]).execute()
         existing_job_ids = {app["job_id"] for app in (existing_result.data or [])}
 
-        # Filter out jobs user already applied to
+        # Filter out jobs user has already applied to (submitted/failed attempts)
         available_jobs = [j for j in jobs if j["id"] not in existing_job_ids]
 
         # Match user to top jobs
@@ -743,12 +746,33 @@ async def run_matching_pipeline(
     for match in all_matches:
         try:
             # Check for existing application
-            existing = supabase.table("applications").select("id").eq(
+            existing = supabase.table("applications").select("id, status").eq(
                 "user_id", match["user_id"]
             ).eq("job_id", match["job_id"]).execute()
 
             if existing.data:
-                logger.debug(f"Application already exists for user {match['user_id']}, job {match['job_id']}")
+                existing_app = existing.data[0]
+                existing_status = existing_app.get("status", "")
+
+                # If previously matched/queued but not applied, update with fresh match data
+                if existing_status in ["matched", "queued", "dry_run"]:
+                    update_data = {
+                        "match_score": match["match_score"],
+                        "match_reasons": match["match_reasons"],
+                        "status": "queued" if auto_queue else "matched",
+                        "matched_at": datetime.now(timezone.utc).isoformat(),
+                    }
+                    if auto_queue:
+                        update_data["queued_at"] = datetime.now(timezone.utc).isoformat()
+
+                    supabase.table("applications").update(update_data).eq("id", existing_app["id"]).execute()
+                    created_count += 1  # Count as refreshed
+                    if auto_queue:
+                        queued_count += 1
+                    logger.debug(f"Refreshed existing application for user {match['user_id']}, job {match['job_id']}")
+                else:
+                    # Status is submitted/failed - skip (shouldn't reach here due to first filter)
+                    logger.debug(f"Application already submitted/failed for user {match['user_id']}, job {match['job_id']}")
                 continue
 
             # Create application record
