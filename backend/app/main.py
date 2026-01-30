@@ -31,6 +31,7 @@ app.include_router(jobs.router, prefix="/api/jobs", tags=["jobs"])
 app.include_router(automation.router, prefix="/api/automation", tags=["automation"])
 app.include_router(pipeline.router, prefix="/api/pipeline", tags=["pipeline"])
 
+
 # Start the background scheduler
 @app.on_event("startup")
 async def startup_event():
