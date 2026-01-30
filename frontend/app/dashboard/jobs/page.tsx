@@ -64,7 +64,7 @@ export default function JobsPage() {
 
   const fetchCachedJobs = async () => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/jobs/cached`)
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL!}/api/jobs/cached`)
       const data = await response.json()
 
       if (data.success) {
@@ -84,7 +84,7 @@ export default function JobsPage() {
   const triggerScrape = async () => {
     setIsRefreshing(true)
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/jobs/scrape`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL!}/api/jobs/scrape`, {
         method: 'POST',
       })
       const data = await response.json()

@@ -134,7 +134,7 @@ export default function OnboardingPage() {
       }
 
       // Call backend to complete onboarding and generate embedding
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users/me/complete-onboarding`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL!}/api/users/me/complete-onboarding`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${sessionData.session.access_token}`,
