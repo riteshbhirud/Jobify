@@ -188,7 +188,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
         <div className="mt-6 text-center text-xs text-muted-foreground">
           <p>
             By continuing, you agree to our{' '}
-            <Link href="#" className="underline hover:text-foreground">Terms of Service</Link>
+            <Link href="/terms" className="underline hover:text-foreground">Terms of Service</Link>
             {' '}and{' '}
             <Link href="#" className="underline hover:text-foreground">Privacy Policy</Link>
           </p>
