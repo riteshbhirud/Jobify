@@ -431,8 +431,18 @@ def build_user_profile(user: Dict[str, Any]) -> Dict[str, Any]:
         "common_answers": user.get("common_answers", {}),
 
         # Portal password (for sites that require account creation)
-        "portal_password": user.get("portal_password", ""),
+        "portal_password": "",
     }
+
+    # Decrypt portal_password if present
+    raw_pw = user.get("portal_password", "")
+    if raw_pw:
+        try:
+            from app.crypto import decrypt_portal_password
+            profile["portal_password"] = decrypt_portal_password(raw_pw)
+        except Exception:
+            # Fallback for legacy plaintext passwords not yet encrypted
+            profile["portal_password"] = raw_pw
 
     return profile
 

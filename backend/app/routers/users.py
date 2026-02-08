@@ -90,6 +90,10 @@ async def get_my_profile(user = Depends(get_current_user)):
     if not result.data:
         raise HTTPException(status_code=404, detail="Profile not found")
 
+    # Mask encrypted portal_password — never expose to frontend
+    if result.data.get("portal_password"):
+        result.data["portal_password"] = "••••••••"
+
     return result.data
 
 
@@ -110,6 +114,11 @@ async def update_my_profile(
 
     if not update_data:
         raise HTTPException(status_code=400, detail="No data to update")
+
+    # Encrypt portal_password before storing
+    if "portal_password" in update_data:
+        from app.crypto import encrypt_portal_password
+        update_data["portal_password"] = encrypt_portal_password(update_data["portal_password"])
 
     result = supabase.table("users")\
         .update(update_data)\

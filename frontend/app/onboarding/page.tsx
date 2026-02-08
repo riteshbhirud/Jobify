@@ -114,11 +114,14 @@ export default function OnboardingPage() {
 
     setSaving(true)
     try {
-      // First save the automation settings data to Supabase
+      // Extract portal_password — it will be sent through the backend for encryption
+      const { portal_password, ...restData } = data
+
+      // Save automation settings (without portal_password) directly to Supabase
       const { error } = await supabase
         .from('users')
         .update({
-          ...data,
+          ...restData,
           is_active: false, // User will manually activate from dashboard
           updated_at: new Date().toISOString(),
         })
@@ -131,6 +134,18 @@ export default function OnboardingPage() {
 
       if (!sessionData?.session?.access_token) {
         throw new Error('No authentication session')
+      }
+
+      // Send portal_password through backend API so it gets encrypted server-side
+      if (portal_password) {
+        await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL!}/api/users/me`, {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${sessionData.session.access_token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ portal_password })
+        })
       }
 
       // Call backend to complete onboarding and generate embedding

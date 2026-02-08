@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     environment: str = "development"
 
+    # Encryption key for portal passwords (Fernet)
+    portal_password_key: str = ""
+
     # BrowserBase settings for cloud browser automation
     browserbase_api_key: Optional[str] = None
     browserbase_project_id: Optional[str] = None
