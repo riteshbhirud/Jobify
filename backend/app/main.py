@@ -3,7 +3,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
-from app.routers import users, jobs, automation, pipeline
+from app.routers import users, jobs, automation, pipeline, payments
 from app.scheduler import start_scheduler
 
 settings = get_settings()
@@ -30,6 +30,7 @@ app.include_router(users.router, prefix="/api/users", tags=["users"])
 app.include_router(jobs.router, prefix="/api/jobs", tags=["jobs"])
 app.include_router(automation.router, prefix="/api/automation", tags=["automation"])
 app.include_router(pipeline.router, prefix="/api/pipeline", tags=["pipeline"])
+app.include_router(payments.router, prefix="/api/payments", tags=["payments"])
 
 
 # Start the background scheduler

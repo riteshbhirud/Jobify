@@ -3,6 +3,7 @@ import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import { BillingButton } from "@/components/dashboard/BillingButton"
 
 export default async function SettingsPage() {
   const supabase = await createServerSupabaseClient()
@@ -98,14 +99,20 @@ export default async function SettingsPage() {
               <div className="space-y-4">
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Current Plan</p>
-                  <p className="text-lg font-bold">FREE</p>
+                  <p className="text-lg font-bold">
+                    {profile?.subscription_status === 'active' && 'Pro — Active'}
+                    {profile?.subscription_status === 'trialing' && 'Pro — Trial'}
+                    {profile?.subscription_status === 'past_due' && 'Pro — Past Due'}
+                    {profile?.subscription_status === 'canceled' && 'Canceled'}
+                    {(!profile?.subscription_status || profile?.subscription_status === 'none') && 'No Plan'}
+                  </p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    3 applications per day
+                    {(profile?.subscription_status === 'active' || profile?.subscription_status === 'trialing')
+                      ? '$2/month — Unlimited applications'
+                      : 'Subscribe to access all features'}
                   </p>
                 </div>
-                <button className="text-sm text-primary hover:underline">
-                  Upgrade to Pro
-                </button>
+                {profile?.stripe_customer_id && <BillingButton />}
               </div>
             </CardContent>
           </Card>

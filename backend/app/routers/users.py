@@ -272,9 +272,9 @@ async def activate_automation(user = Depends(get_current_user)):
 
     supabase = get_supabase()
 
-    # Check if onboarding is complete
+    # Check if onboarding is complete and subscription is active
     profile = supabase.table("users")\
-        .select("onboarding_completed")\
+        .select("onboarding_completed, subscription_status")\
         .eq("id", user.id)\
         .single()\
         .execute()
@@ -283,6 +283,12 @@ async def activate_automation(user = Depends(get_current_user)):
         raise HTTPException(
             status_code=400,
             detail="Please complete onboarding before activating"
+        )
+
+    if profile.data.get("subscription_status") not in ("active", "trialing"):
+        raise HTTPException(
+            status_code=403,
+            detail="Active subscription required to activate automation"
         )
 
     result = supabase.table("users")\

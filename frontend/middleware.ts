@@ -30,36 +30,75 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser()
 
+  const pathname = request.nextUrl.pathname
+
   // Protected routes - redirect to login if not authenticated
-  if (request.nextUrl.pathname.startsWith('/dashboard') || request.nextUrl.pathname.startsWith('/onboarding')) {
+  if (
+    pathname.startsWith('/dashboard') ||
+    pathname.startsWith('/onboarding') ||
+    pathname.startsWith('/subscribe')
+  ) {
     if (!user) {
       return NextResponse.redirect(new URL('/auth/login', request.url))
     }
 
-    // Check onboarding status for dashboard access
-    if (request.nextUrl.pathname.startsWith('/dashboard')) {
-      const { data: profile } = await supabase
-        .from('users')
-        .select('onboarding_completed')
-        .eq('id', user.id)
-        .single()
+    // Fetch profile once for all protected route checks
+    const { data: profile } = await supabase
+      .from('users')
+      .select('onboarding_completed, subscription_status')
+      .eq('id', user.id)
+      .single()
 
+    const isSubscribed =
+      profile?.subscription_status === 'active' ||
+      profile?.subscription_status === 'trialing'
+
+    // Dashboard and onboarding require active subscription
+    if (pathname.startsWith('/dashboard') || pathname.startsWith('/onboarding')) {
+      if (!isSubscribed) {
+        // Route to reactivate if they already completed onboarding before
+        const target = profile?.onboarding_completed
+          ? '/subscribe/reactivate'
+          : '/subscribe'
+        return NextResponse.redirect(new URL(target, request.url))
+      }
+    }
+
+    // Dashboard also requires completed onboarding
+    if (pathname.startsWith('/dashboard')) {
       if (!profile?.onboarding_completed) {
         return NextResponse.redirect(new URL('/onboarding', request.url))
       }
     }
+
+    // Subscribe pages - redirect forward if already subscribed
+    if (pathname.startsWith('/subscribe')) {
+      if (isSubscribed) {
+        if (profile?.onboarding_completed) {
+          return NextResponse.redirect(new URL('/dashboard', request.url))
+        } else {
+          return NextResponse.redirect(new URL('/onboarding', request.url))
+        }
+      }
+    }
   }
 
-  // Auth routes - redirect based on onboarding status if already authenticated
-  if (request.nextUrl.pathname === '/auth/login' || request.nextUrl.pathname === '/auth/signup') {
+  // Auth routes - redirect based on status if already authenticated
+  if (pathname === '/auth/login' || pathname === '/auth/signup') {
     if (user) {
       const { data: profile } = await supabase
         .from('users')
-        .select('onboarding_completed')
+        .select('onboarding_completed, subscription_status')
         .eq('id', user.id)
         .single()
 
-      if (profile?.onboarding_completed) {
+      const isSubscribed =
+        profile?.subscription_status === 'active' ||
+        profile?.subscription_status === 'trialing'
+
+      if (!isSubscribed) {
+        return NextResponse.redirect(new URL('/subscribe', request.url))
+      } else if (profile?.onboarding_completed) {
         return NextResponse.redirect(new URL('/dashboard', request.url))
       } else {
         return NextResponse.redirect(new URL('/onboarding', request.url))
@@ -71,5 +110,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/auth/login', '/auth/signup', '/onboarding/:path*'],
+  matcher: ['/dashboard/:path*', '/auth/login', '/auth/signup', '/onboarding/:path*', '/subscribe/:path*'],
 }

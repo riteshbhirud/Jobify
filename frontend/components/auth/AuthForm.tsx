@@ -43,9 +43,9 @@ export default function AuthForm({ mode }: AuthFormProps) {
         if (error) throw error
 
         if (data.user) {
-          setMessage('Account created! Redirecting to onboarding...')
+          setMessage('Account created! Redirecting to subscription...')
           setTimeout(() => {
-            router.push('/onboarding')
+            router.push('/subscribe')
             router.refresh()
           }, 1000)
         }
