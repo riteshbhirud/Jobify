@@ -68,7 +68,7 @@ export function FAQ() {
             <span className="text-gradient"> questions</span>
           </h2>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            Everything you need to know about Jobify
+            Everything you need to know about ApplyAFK
           </p>
         </motion.div>
 
@@ -151,7 +151,7 @@ export function FAQ() {
             Still have questions?
           </p>
           <a
-            href="mailto:support@jobify.com"
+            href="mailto:support@applyafk.com"
             className="inline-flex items-center gap-2 text-primary hover:text-primary/80 font-medium transition-colors"
           >
             Contact our support team

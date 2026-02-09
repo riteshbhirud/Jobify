@@ -27,7 +27,7 @@ export function DashboardHeader({ user }: DashboardHeaderProps) {
     <div className="bg-background border-b">
       <div className="flex justify-between items-center h-16 px-6">
         <div className="flex items-center md:hidden">
-          <span className="text-xl font-bold">Jobify</span>
+          <span className="text-xl font-bold"><span className="text-foreground">Apply</span><span className="text-gradient">AFK</span></span>
         </div>
 
         <div className="flex-1" />

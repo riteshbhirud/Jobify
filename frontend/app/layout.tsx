@@ -6,8 +6,8 @@ import { Inter } from 'next/font/google'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata = {
-  title: 'Job Auto Apply',
-  description: 'Automated job applications',
+  title: 'ApplyAFK - Never Miss a New Role',
+  description: 'AI-powered job application automation. Be first to apply, cover every role that fits you.',
 }
 
 export default function RootLayout({

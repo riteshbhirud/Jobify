@@ -3,89 +3,18 @@
 import Link from "next/link"
 import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
-import { Check, Sparkles, Zap, Crown } from "lucide-react"
+import { Check, Rocket, ArrowRight } from "lucide-react"
 
-const plans = [
-  {
-    name: "Free",
-    icon: Sparkles,
-    price: "$0",
-    period: "/month",
-    description: "Perfect for getting started",
-    features: [
-      "3 applications per day",
-      "Basic job matching",
-      "Email notifications",
-      "Application tracking",
-      "Standard support",
-    ],
-    cta: "Start Free",
-    popular: false,
-    gradient: "from-gray-500/10 to-gray-600/10",
-    iconGradient: "from-gray-500 to-gray-600",
-  },
-  {
-    name: "Starter",
-    icon: Zap,
-    price: "$29",
-    period: "/month",
-    description: "For active job seekers",
-    features: [
-      "10 applications per day",
-      "Advanced AI matching",
-      "Priority notifications",
-      "Resume optimization tips",
-      "Priority support",
-      "Application analytics",
-    ],
-    cta: "Get Started",
-    popular: true,
-    gradient: "from-primary/20 to-secondary/20",
-    iconGradient: "from-primary to-secondary",
-  },
-  {
-    name: "Pro",
-    icon: Crown,
-    price: "$79",
-    period: "/month",
-    description: "For maximum reach",
-    features: [
-      "25 applications per day",
-      "AI-tailored resumes",
-      "Cover letter generation",
-      "Interview prep resources",
-      "Dedicated support",
-      "Advanced analytics",
-      "Early access to features",
-    ],
-    cta: "Go Pro",
-    popular: false,
-    gradient: "from-purple-500/10 to-pink-500/10",
-    iconGradient: "from-purple-500 to-pink-500",
-  },
+const features = [
+  "Unlimited job applications",
+  "Advanced AI matching",
+  "Cover letter generation",
+  "Resume optimization",
+  "Application analytics",
+  "Priority support",
+  "Real-time dashboard",
+  "All ATS platforms supported",
 ]
-
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.15,
-    },
-  },
-}
-
-const cardVariants = {
-  hidden: { opacity: 0, y: 50 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: {
-      duration: 0.6,
-      ease: [0.22, 1, 0.36, 1] as const,
-    },
-  },
-}
 
 export function Pricing() {
   return (
@@ -112,97 +41,82 @@ export function Pricing() {
             Pricing
           </motion.span>
           <h2 className="text-4xl sm:text-5xl font-bold text-foreground mb-6">
-            Simple, transparent
-            <span className="text-gradient"> pricing</span>
+            One plan.
+            <span className="text-gradient"> Everything included.</span>
           </h2>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            Choose the plan that fits your job search. Upgrade or downgrade anytime.
+            No tiers, no upsells. Get full access to every feature at our special launch price.
           </p>
         </motion.div>
 
-        {/* Pricing cards */}
+        {/* Single pricing card */}
         <motion.div
-          variants={containerVariants}
-          initial="hidden"
-          whileInView="visible"
+          initial={{ opacity: 0, y: 50 }}
+          whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-100px" }}
-          className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto"
+          transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+          className="max-w-lg mx-auto"
         >
-          {plans.map((plan) => (
-            <motion.div
-              key={plan.name}
-              variants={cardVariants}
-              whileHover={{ y: -8 }}
-              className={`relative group ${plan.popular ? "md:-mt-4 md:mb-4" : ""}`}
-            >
-              {/* Popular badge */}
-              {plan.popular && (
-                <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-20">
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    whileInView={{ scale: 1 }}
-                    viewport={{ once: true }}
-                    transition={{ delay: 0.5, type: "spring" }}
-                    className="px-4 py-1.5 rounded-full bg-gradient-to-r from-primary to-secondary text-white text-sm font-semibold shadow-glow"
-                  >
-                    Most Popular
-                  </motion.div>
-                </div>
-              )}
-
-              <div
-                className={`h-full p-8 rounded-3xl glass border-2 transition-all duration-500 ${
-                  plan.popular
-                    ? "border-primary/50 shadow-glow"
-                    : "border-white/20 hover:border-primary/30"
-                }`}
+          <div className="relative group">
+            {/* Launch offer badge */}
+            <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-20">
+              <motion.div
+                initial={{ scale: 0 }}
+                whileInView={{ scale: 1 }}
+                viewport={{ once: true }}
+                transition={{ delay: 0.5, type: "spring" }}
+                className="px-5 py-1.5 rounded-full bg-gradient-to-r from-primary to-secondary text-white text-sm font-semibold shadow-glow whitespace-nowrap"
               >
-                {/* Plan header */}
-                <div className="text-center mb-8">
-                  <div
-                    className={`w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br ${plan.iconGradient} flex items-center justify-center mb-4 shadow-lg`}
-                  >
-                    <plan.icon className="w-8 h-8 text-white" />
-                  </div>
-                  <h3 className="text-2xl font-bold text-foreground mb-2">
-                    {plan.name}
-                  </h3>
-                  <p className="text-muted-foreground text-sm">{plan.description}</p>
+                Launch Offer
+              </motion.div>
+            </div>
+
+            <div className="p-10 rounded-3xl glass border-2 border-primary/50 shadow-glow hover:shadow-glow-lg transition-all duration-500">
+              {/* Plan header */}
+              <div className="text-center mb-8">
+                <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center mb-5 shadow-lg">
+                  <Rocket className="w-8 h-8 text-white" />
                 </div>
-
-                {/* Price */}
-                <div className="text-center mb-8">
-                  <span className="text-5xl font-bold text-foreground">{plan.price}</span>
-                  <span className="text-muted-foreground">{plan.period}</span>
-                </div>
-
-                {/* Features */}
-                <ul className="space-y-4 mb-8">
-                  {plan.features.map((feature) => (
-                    <li key={feature} className="flex items-start gap-3">
-                      <div className="mt-0.5">
-                        <Check className="w-5 h-5 text-secondary" />
-                      </div>
-                      <span className="text-muted-foreground">{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-
-                {/* CTA */}
-                <Button
-                  asChild
-                  className={`w-full py-6 text-base transition-all duration-300 ${
-                    plan.popular
-                      ? "bg-gradient-to-r from-primary to-secondary hover:opacity-90 shadow-glow hover:shadow-glow-lg"
-                      : "glass hover:bg-primary/10"
-                  }`}
-                  variant={plan.popular ? "default" : "outline"}
-                >
-                  <Link href="/auth/signup">{plan.cta}</Link>
-                </Button>
+                <h3 className="text-2xl font-bold text-foreground mb-1">
+                  Full Access
+                </h3>
+                <p className="text-muted-foreground text-sm">Everything you need to land your dream job</p>
               </div>
-            </motion.div>
-          ))}
+
+              {/* Price */}
+              <div className="text-center mb-8">
+                <div className="flex items-baseline justify-center gap-1">
+                  <span className="text-6xl font-bold text-foreground">$3.99</span>
+                  <span className="text-muted-foreground text-lg">/month</span>
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent mb-8" />
+
+              {/* Features - 2 columns */}
+              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 mb-10">
+                {features.map((feature) => (
+                  <li key={feature} className="flex items-center gap-2.5">
+                    <Check className="w-4 h-4 text-secondary flex-shrink-0" />
+                    <span className="text-sm text-muted-foreground">{feature}</span>
+                  </li>
+                ))}
+              </ul>
+
+              {/* CTA */}
+              <Button
+                asChild
+                className="w-full py-6 text-base bg-gradient-to-r from-primary to-secondary hover:opacity-90 shadow-glow hover:shadow-glow-lg transition-all duration-300 hover:scale-[1.02] group"
+              >
+                <Link href="/auth/signup" className="flex items-center justify-center gap-2">
+                  Get Started — $3.99/mo
+                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                </Link>
+              </Button>
+
+            </div>
+          </div>
         </motion.div>
 
         {/* Money back guarantee */}

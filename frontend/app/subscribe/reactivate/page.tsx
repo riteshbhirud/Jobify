@@ -65,13 +65,13 @@ export default function ReactivatePage() {
           <Logo className="inline-block mb-6" />
           <h1 className="text-2xl font-bold mb-2">Your Subscription Has Ended</h1>
           <p className="text-muted-foreground">
-            Resubscribe to continue using Jobify. Your profile and data are still saved.
+            Resubscribe to continue using ApplyAFK. Your profile and data are still saved.
           </p>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle>Jobify Pro</CardTitle>
+            <CardTitle>ApplyAFK Pro</CardTitle>
             <CardDescription>Pick up where you left off</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">

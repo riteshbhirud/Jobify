@@ -72,7 +72,7 @@ export default function SubscribePage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Jobify Pro</CardTitle>
+            <CardTitle>ApplyAFK Pro</CardTitle>
             <CardDescription>Automate your job applications</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">

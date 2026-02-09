@@ -36,7 +36,7 @@ export default function SubscribeSuccessPage() {
             <div className="flex justify-center mb-4">
               <CheckCircle className="h-12 w-12 text-secondary" />
             </div>
-            <CardTitle className="text-2xl">Welcome to Jobify Pro!</CardTitle>
+            <CardTitle className="text-2xl">Welcome to ApplyAFK Pro!</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-muted-foreground">

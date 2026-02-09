@@ -8,8 +8,9 @@ export function Logo({ className }: { className?: string }) {
         <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-lg group-hover:shadow-glow transition-shadow duration-300">
           <Zap className="w-5 h-5 text-white" />
         </div>
-        <span className="text-xl font-bold text-gradient">
-          Jobify
+        <span className="text-xl font-bold">
+          <span className="text-foreground">Apply</span>
+          <span className="text-gradient">AFK</span>
         </span>
       </div>
     </Link>

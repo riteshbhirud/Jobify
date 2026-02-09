@@ -1,11 +1,71 @@
 "use client"
 
 import Link from "next/link"
-import { motion } from "framer-motion"
+import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { ArrowRight, Sparkles, Zap, Clock } from "lucide-react"
+import { useState, useEffect, useCallback } from "react"
+
+const taglines = [
+  "Apply before anyone else.",
+  "Cover every role that fits you.",
+  "Be first in line, every time.",
+  "Never let a job slip by.",
+  "Blanket the market while you sleep.",
+]
 
 export function Hero() {
+  const [currentIndex, setCurrentIndex] = useState(0)
+  const [displayText, setDisplayText] = useState("")
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [isPaused, setIsPaused] = useState(false)
+
+  const currentTagline = taglines[currentIndex]
+
+  const typeWriter = useCallback(() => {
+    if (isPaused) return
+
+    if (!isDeleting) {
+      // Typing
+      if (displayText.length < currentTagline.length) {
+        const timeout = setTimeout(() => {
+          setDisplayText(currentTagline.slice(0, displayText.length + 1))
+        }, 60 + Math.random() * 40) // Slightly variable speed for natural feel
+        return () => clearTimeout(timeout)
+      } else {
+        // Finished typing, pause before deleting
+        const timeout = setTimeout(() => {
+          setIsDeleting(true)
+        }, 2500)
+        return () => clearTimeout(timeout)
+      }
+    } else {
+      // Deleting
+      if (displayText.length > 0) {
+        const timeout = setTimeout(() => {
+          setDisplayText(displayText.slice(0, -1))
+        }, 30) // Delete faster than typing
+        return () => clearTimeout(timeout)
+      } else {
+        // Finished deleting, move to next tagline
+        setIsDeleting(false)
+        setCurrentIndex((prev) => (prev + 1) % taglines.length)
+      }
+    }
+  }, [displayText, isDeleting, isPaused, currentTagline])
+
+  useEffect(() => {
+    const cleanup = typeWriter()
+    return cleanup
+  }, [typeWriter])
+
+  // Small initial delay before typing starts
+  useEffect(() => {
+    setIsPaused(true)
+    const timeout = setTimeout(() => setIsPaused(false), 1200)
+    return () => clearTimeout(timeout)
+  }, [])
+
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden mesh-gradient">
       {/* Animated background orbs */}
@@ -63,15 +123,31 @@ export function Hero() {
             <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse" />
           </motion.div>
 
-          {/* Main Headline */}
+          {/* Main Headline - Static line */}
           <motion.h1
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.3 }}
             className="text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tight leading-[1.1] mb-6"
           >
-            <span className="block text-foreground">Focus on what matters.</span>
-            <span className="block mt-2 text-gradient-animate">We handle the applications.</span>
+            <span className="block text-foreground">Never miss a new role.</span>
+
+            {/* Dynamic tagline with typewriter */}
+            <span className="block mt-3 min-h-[1.2em]">
+              <span className="text-gradient-animate">
+                {displayText}
+              </span>
+              <motion.span
+                animate={{ opacity: [1, 0] }}
+                transition={{
+                  duration: 0.6,
+                  repeat: Infinity,
+                  repeatType: "reverse",
+                  ease: "easeInOut",
+                }}
+                className="inline-block w-[3px] h-[0.85em] bg-primary ml-1 align-middle rounded-full"
+              />
+            </span>
           </motion.h1>
 
           {/* Subheadline */}
@@ -81,8 +157,8 @@ export function Hero() {
             transition={{ duration: 0.8, delay: 0.5 }}
             className="text-xl sm:text-2xl text-muted-foreground max-w-3xl mx-auto mb-10 leading-relaxed"
           >
-            Your fully automatic career assistant. Build skills, ace interviews,
-            live your life while we find and apply to your dream opportunities.
+            We scan every job board around the clock and apply within minutes of posting.
+            You&apos;re always first in line, across every role that matches you.
           </motion.p>
 
           {/* CTA Buttons */}
@@ -121,7 +197,7 @@ export function Hero() {
           >
             {[
               { icon: Zap, value: "10,000+", label: "Applications Sent" },
-              { icon: Clock, value: "2 hrs", label: "Response Time" },
+              { icon: Clock, value: "< 2 min", label: "Time to Apply" },
               { icon: Sparkles, value: "500+", label: "Happy Users" },
             ].map((stat, index) => (
               <motion.div
