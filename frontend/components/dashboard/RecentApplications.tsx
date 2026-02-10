@@ -17,10 +17,14 @@ interface RecentApplicationsProps {
 
 function getStatusBadge(status: string) {
   switch (status) {
-    case 'applied':
-      return <Badge variant="secondary">Applied ✓</Badge>
-    case 'pending':
-      return <Badge variant="outline">Pending</Badge>
+    case 'submitted':
+      return <Badge className="bg-green-500/10 text-green-600 border-green-500/20">Submitted</Badge>
+    case 'started':
+      return <Badge className="bg-blue-500/10 text-blue-600 border-blue-500/20">In Progress</Badge>
+    case 'queued':
+      return <Badge className="bg-yellow-500/10 text-yellow-600 border-yellow-500/20">Queued</Badge>
+    case 'matched':
+      return <Badge className="bg-purple-500/10 text-purple-600 border-purple-500/20">Matched</Badge>
     case 'failed':
       return <Badge variant="destructive">Failed</Badge>
     default:
