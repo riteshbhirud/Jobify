@@ -14,7 +14,7 @@ const footerLinks = {
   support: [
     { label: "Contact Us", href: "mailto:support@applyafk.com" },
     { label: "Terms of Service", href: "/terms" },
-    { label: "Privacy Policy", href: "#" },
+    { label: "Privacy Policy", href: "/privacy" },
   ],
 }
 
