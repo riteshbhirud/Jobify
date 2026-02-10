@@ -16,7 +16,7 @@ stripe.api_key = settings.stripe_secret_key
 FRONTEND_URL = (
     "http://localhost:3000"
     if settings.environment == "development"
-    else "https://applyafk-frontend.vercel.app"
+    else "https://www.applyafk.com"
 )
 
 
@@ -26,7 +26,7 @@ FRONTEND_URL = (
 
 @router.post("/create-checkout-session")
 async def create_checkout_session(user=Depends(get_current_user)):
-    """Create a Stripe Checkout Session for subscription with 7-day trial."""
+    """Create a Stripe Checkout Session for subscription."""
 
     supabase = get_supabase()
 
@@ -69,7 +69,6 @@ async def create_checkout_session(user=Depends(get_current_user)):
             "quantity": 1,
         }],
         subscription_data={
-            "trial_period_days": 7,
             "metadata": {"supabase_user_id": user.id},
         },
         success_url=f"{FRONTEND_URL}/subscribe/success?session_id={{CHECKOUT_SESSION_ID}}",

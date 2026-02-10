@@ -19,6 +19,8 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "https://applyafk-frontend.vercel.app",
+        "https://www.applyafk.com",
+        "https://applyafk.com",
     ],
     allow_credentials=True,
     allow_methods=["*"],

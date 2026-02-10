@@ -86,7 +86,7 @@ export default function ReactivatePage() {
 
             <div className="pt-4 border-t">
               <p className="text-3xl font-bold">
-                $2<span className="text-sm font-normal text-muted-foreground">/month</span>
+                $3.99<span className="text-sm font-normal text-muted-foreground">/month</span>
               </p>
             </div>
 
@@ -108,7 +108,7 @@ export default function ReactivatePage() {
                   Redirecting to checkout...
                 </span>
               ) : (
-                'Resubscribe — $2/month'
+                'Resubscribe — $3.99/mo'
               )}
             </Button>
 

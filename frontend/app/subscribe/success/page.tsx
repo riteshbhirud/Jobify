@@ -40,7 +40,7 @@ export default function SubscribeSuccessPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-muted-foreground">
-              Your 7-day free trial has started. Let&apos;s set up your profile so we can start matching you with jobs.
+              Your subscription is active. Let&apos;s set up your profile so we can start matching you with jobs.
             </p>
 
             <p className="text-sm text-muted-foreground">

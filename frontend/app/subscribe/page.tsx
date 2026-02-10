@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Logo } from "@/components/shared/Logo"
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner"
-import { Check } from "lucide-react"
+import { Check, Sparkles } from "lucide-react"
 
 export default function SubscribePage() {
   const [loading, setLoading] = useState(false)
@@ -64,13 +64,19 @@ export default function SubscribePage() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <Logo className="inline-block mb-6" />
-          <h1 className="text-2xl font-bold mb-2">Start Your Free Trial</h1>
+          <h1 className="text-2xl font-bold mb-2">Get Started with ApplyAFK</h1>
           <p className="text-muted-foreground">
-            7 days free, then $2/month. Cancel anytime.
+            Full access for just $3.99/month. Cancel anytime.
           </p>
         </div>
 
-        <Card>
+        <Card className="relative overflow-hidden">
+          <div className="absolute top-4 right-4">
+            <span className="inline-flex items-center gap-1 bg-secondary/10 text-secondary text-xs font-semibold px-3 py-1 rounded-full border border-secondary/20">
+              <Sparkles className="h-3 w-3" />
+              Launch Offer
+            </span>
+          </div>
           <CardHeader>
             <CardTitle>ApplyAFK Pro</CardTitle>
             <CardDescription>Automate your job applications</CardDescription>
@@ -87,9 +93,11 @@ export default function SubscribePage() {
 
             <div className="pt-4 border-t">
               <p className="text-3xl font-bold">
-                $2<span className="text-sm font-normal text-muted-foreground">/month</span>
+                $3.99<span className="text-sm font-normal text-muted-foreground">/month</span>
               </p>
-              <p className="text-sm text-muted-foreground">after 7-day free trial</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Special launch pricing — cancel anytime
+              </p>
             </div>
 
             {error && (
@@ -110,13 +118,12 @@ export default function SubscribePage() {
                   Redirecting to checkout...
                 </span>
               ) : (
-                'Start Free Trial'
+                'Subscribe — $3.99/mo'
               )}
             </Button>
 
             <p className="text-xs text-center text-muted-foreground">
               You will be redirected to Stripe for secure payment.
-              Your card will not be charged during the trial period.
             </p>
           </CardContent>
         </Card>
