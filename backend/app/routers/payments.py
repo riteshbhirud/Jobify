@@ -60,21 +60,31 @@ async def create_checkout_session(user=Depends(get_current_user)):
             .eq("id", user.id) \
             .execute()
 
-    checkout_session = stripe.checkout.Session.create(
-        customer=customer_id,
-        payment_method_types=["card"],
-        mode="subscription",
-        line_items=[{
-            "price": settings.stripe_price_id,
-            "quantity": 1,
-        }],
-        subscription_data={
-            "metadata": {"supabase_user_id": user.id},
-        },
-        success_url=f"{FRONTEND_URL}/subscribe/success?session_id={{CHECKOUT_SESSION_ID}}",
-        cancel_url=f"{FRONTEND_URL}/subscribe",
-        metadata={"supabase_user_id": user.id},
-    )
+    try:
+        checkout_session = stripe.checkout.Session.create(
+            customer=customer_id,
+            payment_method_types=["card"],
+            mode="subscription",
+            line_items=[{
+                "price": settings.stripe_price_id,
+                "quantity": 1,
+            }],
+            subscription_data={
+                "metadata": {"supabase_user_id": user.id},
+            },
+            success_url=f"{FRONTEND_URL}/subscribe/success?session_id={{CHECKOUT_SESSION_ID}}",
+            cancel_url=f"{FRONTEND_URL}/subscribe",
+            metadata={"supabase_user_id": user.id},
+        )
+    except stripe.InvalidRequestError as e:
+        logger.error(f"Stripe InvalidRequestError: {e}")
+        raise HTTPException(status_code=400, detail=f"Stripe error: {str(e)}")
+    except stripe.AuthenticationError as e:
+        logger.error(f"Stripe AuthenticationError: {e}")
+        raise HTTPException(status_code=401, detail="Invalid Stripe API key")
+    except stripe.StripeError as e:
+        logger.error(f"Stripe error: {e}")
+        raise HTTPException(status_code=502, detail=f"Stripe error: {str(e)}")
 
     return {"checkout_url": checkout_session.url}
 

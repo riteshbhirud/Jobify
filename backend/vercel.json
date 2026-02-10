@@ -5,28 +5,26 @@
       "use": "@vercel/python"
     }
   ],
-  "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
-        { "key": "Access-Control-Allow-Origin", "value": "https://www.applyafk.com" },
-        { "key": "Access-Control-Allow-Methods", "value": "GET, POST, PUT, PATCH, DELETE, OPTIONS" },
-        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization" },
-        { "key": "Access-Control-Allow-Credentials", "value": "true" }
-      ]
-    }
-  ],
   "routes": [
     {
-      "src": "/(.*)",
+      "src": "/api/(.*)",
       "methods": ["OPTIONS"],
       "headers": {
         "Access-Control-Allow-Origin": "https://www.applyafk.com",
         "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type, Authorization",
-        "Access-Control-Allow-Credentials": "true"
+        "Access-Control-Allow-Credentials": "true",
+        "Access-Control-Max-Age": "86400"
       },
       "status": 204
+    },
+    {
+      "src": "/api/(.*)",
+      "headers": {
+        "Access-Control-Allow-Origin": "https://www.applyafk.com",
+        "Access-Control-Allow-Credentials": "true"
+      },
+      "dest": "api/index.py"
     },
     {
       "src": "/(.*)",
