@@ -1,12 +1,14 @@
 # backend/app/main.py
 
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
 from app.routers import users, jobs, automation, pipeline, payments
-from app.scheduler import start_scheduler
 
 settings = get_settings()
+
+IS_VERCEL = bool(os.environ.get("VERCEL"))
 
 app = FastAPI(
     title="Job Auto Apply API",
@@ -35,10 +37,12 @@ app.include_router(pipeline.router, prefix="/api/pipeline", tags=["pipeline"])
 app.include_router(payments.router, prefix="/api/payments", tags=["payments"])
 
 
-# Start the background scheduler
+# Start the background scheduler (only for non-serverless environments)
 @app.on_event("startup")
 async def startup_event():
-    start_scheduler()
+    if not IS_VERCEL:
+        from app.scheduler import start_scheduler
+        start_scheduler()
 
 @app.get("/health")
 async def health():
