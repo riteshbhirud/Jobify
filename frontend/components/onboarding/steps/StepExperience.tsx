@@ -143,12 +143,18 @@ export function StepExperience({ initialData, onNext, onBack, loading }: StepExp
 
   const parseDate = (dateStr: string) => {
     if (!dateStr) return { month: '', year: '' }
-    const [year, month] = dateStr.split('-')
-    return { year: year || '', month: month || '' }
+    const parts = dateStr.split('-')
+    if (parts.length === 2) {
+      // Could be "YYYY-MM" or "-MM" (month-only, stored as "-MM")
+      return { year: parts[0] || '', month: parts[1] || '' }
+    }
+    // Single value — treat as year
+    return { year: parts[0] || '', month: '' }
   }
 
   const formatDate = (month: string, year: string) => {
-    if (!year) return ''
+    if (!year && !month) return ''
+    if (!year) return `-${month}`
     if (!month) return year
     return `${year}-${month}`
   }
