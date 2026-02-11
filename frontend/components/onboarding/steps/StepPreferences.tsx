@@ -48,6 +48,13 @@ export function StepPreferences({ initialData, onNext, onBack, loading }: StepPr
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (validateForm()) {
+      // Debug what's being submitted
+      console.log('🚀 StepPreferences submitting:', {
+        excluded_companies: formData.excluded_companies,
+        preferred_companies: formData.preferred_companies,
+        excluded_count: formData.excluded_companies.length,
+        preferred_count: formData.preferred_companies.length
+      })
       onNext(formData)
     }
   }

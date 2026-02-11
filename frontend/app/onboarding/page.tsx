@@ -85,6 +85,15 @@ export default function OnboardingPage() {
 
     setSaving(true)
     try {
+      // Debug logging
+      console.log('🔍 Saving data to Supabase:', {
+        userId,
+        dataKeys: Object.keys(data),
+        excluded_companies: data.excluded_companies,
+        preferred_companies: data.preferred_companies,
+        nextStep
+      })
+
       const { error } = await supabase
         .from('users')
         .update({
@@ -94,7 +103,18 @@ export default function OnboardingPage() {
         })
         .eq('id', userId)
 
-      if (error) throw error
+      if (error) {
+        console.error('❌ Supabase update error:', error)
+        throw error
+      }
+
+      // Verify what was saved
+      const { data: verifyData } = await supabase
+        .from('users')
+        .select('excluded_companies, preferred_companies, onboarding_step')
+        .eq('id', userId)
+        .single()
+      console.log('✅ Data verified in DB:', verifyData)
 
       setUserData({ ...userData, ...data })
       setCurrentStep(nextStep)
@@ -138,7 +158,7 @@ export default function OnboardingPage() {
 
       // Send portal_password through backend API so it gets encrypted server-side
       if (portal_password) {
-        await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL!}/api/users/me`, {
+        const passwordResponse = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL!}/api/users/me`, {
           method: 'PATCH',
           headers: {
             'Authorization': `Bearer ${sessionData.session.access_token}`,
@@ -146,6 +166,14 @@ export default function OnboardingPage() {
           },
           body: JSON.stringify({ portal_password })
         })
+
+        if (!passwordResponse.ok) {
+          const passwordError = await passwordResponse.json()
+          console.error('Failed to save portal password:', passwordError)
+          throw new Error(passwordError.detail || 'Failed to save portal password')
+        }
+
+        console.log('Portal password saved and encrypted successfully')
       }
 
       // Call backend to complete onboarding and generate embedding

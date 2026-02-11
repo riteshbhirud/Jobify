@@ -190,6 +190,43 @@ def _find_user_id_by_customer(supabase, customer_id: str):
     return result.data["id"] if result.data else None
 
 
+def _extract_subscription_end_date(subscription):
+    """
+    Extract subscription end date from Stripe subscription object.
+    Returns ISO datetime string or None.
+    """
+    from datetime import datetime, timezone
+
+    try:
+        # Debug: Log what we're working with
+        logger.info(f"Extracting end date from subscription type: {type(subscription)}")
+
+        # Stripe objects support both dict-like and attribute access
+        period_end_timestamp = None
+
+        # Try attribute access first (for Stripe objects)
+        if hasattr(subscription, 'current_period_end'):
+            period_end_timestamp = subscription.current_period_end
+            logger.info(f"Found current_period_end via attribute: {period_end_timestamp}")
+        # Fall back to dict access
+        elif isinstance(subscription, dict):
+            period_end_timestamp = subscription.get("current_period_end")
+            logger.info(f"Found current_period_end via dict: {period_end_timestamp}")
+
+        if period_end_timestamp:
+            dt = datetime.fromtimestamp(period_end_timestamp, tz=timezone.utc)
+            iso_date = dt.isoformat()
+            logger.info(f"Converted timestamp {period_end_timestamp} to ISO: {iso_date}")
+            return iso_date
+
+        logger.warning(f"Could not extract subscription end date. Subscription keys/attrs: {dir(subscription) if hasattr(subscription, '__dir__') else subscription.keys() if isinstance(subscription, dict) else 'unknown'}")
+        return None
+
+    except Exception as e:
+        logger.error(f"Error extracting subscription end date: {e}", exc_info=True)
+        return None
+
+
 async def handle_checkout_completed(session):
     """Called when user completes Stripe Checkout."""
 
@@ -205,16 +242,25 @@ async def handle_checkout_completed(session):
             return
 
     # Fetch subscription to get actual status (trialing vs active)
+    logger.info(f"Fetching subscription {subscription_id} from Stripe...")
     subscription = stripe.Subscription.retrieve(subscription_id)
+    logger.info(f"Retrieved subscription: {subscription.id}, status: {subscription.status}")
+    subscription_ends_at = _extract_subscription_end_date(subscription)
+    logger.info(f"Extracted subscription_ends_at: {subscription_ends_at}")
 
-    supabase.table("users").update({
+    update_data = {
         "stripe_customer_id": customer_id,
         "stripe_subscription_id": subscription_id,
         "subscription_status": subscription.status,
         "plan": "pro",
-    }).eq("id", user_id).execute()
+    }
 
-    logger.info(f"Checkout completed for user {user_id}, status: {subscription.status}")
+    if subscription_ends_at:
+        update_data["subscription_ends_at"] = subscription_ends_at
+
+    supabase.table("users").update(update_data).eq("id", user_id).execute()
+
+    logger.info(f"Checkout completed for user {user_id}, status: {subscription.status}, ends: {subscription_ends_at}")
 
 
 async def handle_subscription_updated(subscription):
@@ -230,10 +276,18 @@ async def handle_subscription_updated(subscription):
         logger.error(f"No user found for customer {customer_id}")
         return
 
+    logger.info(f"Extracting end date for subscription {subscription_id}...")
+    subscription_ends_at = _extract_subscription_end_date(subscription)
+    logger.info(f"Extracted subscription_ends_at: {subscription_ends_at}")
+
     update_data = {
         "subscription_status": status,
         "stripe_subscription_id": subscription_id,
     }
+
+    # Add subscription end date if available
+    if subscription_ends_at:
+        update_data["subscription_ends_at"] = subscription_ends_at
 
     # If subscription is no longer active/trialing, deactivate automation
     if status not in ("active", "trialing"):
@@ -247,7 +301,7 @@ async def handle_subscription_updated(subscription):
         .eq("id", user_id) \
         .execute()
 
-    logger.info(f"Subscription updated for user {user_id}: {status}")
+    logger.info(f"Subscription updated for user {user_id}: {status}, ends: {subscription_ends_at}")
 
 
 async def handle_subscription_deleted(subscription):
@@ -263,6 +317,7 @@ async def handle_subscription_deleted(subscription):
 
     supabase.table("users").update({
         "subscription_status": "canceled",
+        "subscription_ends_at": None,  # Clear the end date
         "is_active": False,
         "plan": "free",
     }).eq("id", user_id).execute()
