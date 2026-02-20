@@ -23,9 +23,11 @@ interface StepExperienceProps {
   onNext: (data: ExperienceData) => void
   onBack: () => void
   loading?: boolean
+  mode?: 'onboarding' | 'edit'
+  onSave?: (data: ExperienceData) => void
 }
 
-export function StepExperience({ initialData, onNext, onBack, loading }: StepExperienceProps) {
+export function StepExperience({ initialData, onNext, onBack, loading, mode = 'onboarding', onSave }: StepExperienceProps) {
   const [entries, setEntries] = useState<ExperienceEntry[]>(
     initialData?.experience && initialData.experience.length > 0
       ? initialData.experience.map((exp) => ({
@@ -118,7 +120,12 @@ export function StepExperience({ initialData, onNext, onBack, loading }: StepExp
       const filledEntries = entries.filter(
         (entry) => entry.company.trim() || entry.title.trim()
       )
-      onNext({ experience: filledEntries })
+      const data = { experience: filledEntries }
+      if (mode === 'edit' && onSave) {
+        onSave(data)
+      } else {
+        onNext(data)
+      }
     }
   }
 
@@ -159,18 +166,7 @@ export function StepExperience({ initialData, onNext, onBack, loading }: StepExp
     return `${year}-${month}`
   }
 
-  return (
-    <Card className="max-w-3xl mx-auto shadow-lg border-0 bg-card/80 backdrop-blur">
-      <CardHeader className="text-center pb-2">
-        <div className="mx-auto w-14 h-14 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center mb-4">
-          <Briefcase className="h-7 w-7 text-primary" />
-        </div>
-        <CardTitle className="text-2xl">Work Experience</CardTitle>
-        <CardDescription className="text-base">
-          Add your work experience, internships, and relevant positions
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="pt-4">
+  const formContent = (
         <form onSubmit={handleSubmit} className="space-y-4">
           <AnimatePresence mode="popLayout">
             {entries.map((entry) => {
@@ -438,19 +434,53 @@ Led a team of 5 engineers`}
             Add Another Experience
           </Button>
 
-          <p className="text-sm text-muted-foreground text-center">
-            No work experience yet? No problem - you can skip this step
-          </p>
+          {mode === 'onboarding' && (
+            <p className="text-sm text-muted-foreground text-center">
+              No work experience yet? No problem - you can skip this step
+            </p>
+          )}
 
           <div className="flex justify-between pt-6">
-            <Button type="button" variant="ghost" onClick={onBack} disabled={loading}>
-              Back
-            </Button>
-            <Button type="submit" disabled={loading} className="px-8">
-              {loading ? 'Saving...' : 'Continue'}
-            </Button>
+            {mode === 'edit' ? (
+              <>
+                <Button type="button" variant="ghost" onClick={onBack} disabled={loading}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={loading} className="px-8">
+                  {loading ? 'Saving...' : 'Save Changes'}
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button type="button" variant="ghost" onClick={onBack} disabled={loading}>
+                  Back
+                </Button>
+                <Button type="submit" disabled={loading} className="px-8">
+                  {loading ? 'Saving...' : 'Continue'}
+                </Button>
+              </>
+            )}
           </div>
         </form>
+  )
+
+  if (mode === 'edit') {
+    return formContent
+  }
+
+  return (
+    <Card className="max-w-3xl mx-auto shadow-lg border-0 bg-card/80 backdrop-blur">
+      <CardHeader className="text-center pb-2">
+        <div className="mx-auto w-14 h-14 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center mb-4">
+          <Briefcase className="h-7 w-7 text-primary" />
+        </div>
+        <CardTitle className="text-2xl">Work Experience</CardTitle>
+        <CardDescription className="text-base">
+          Add your work experience, internships, and relevant positions
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="pt-4">
+        {formContent}
       </CardContent>
     </Card>
   )

@@ -1,9 +1,10 @@
 // frontend/app/layout.tsx
 
 import './globals.css'
-import { Inter } from 'next/font/google'
-
-const inter = Inter({ subsets: ['latin'] })
+import '@fontsource/inter/400.css'
+import '@fontsource/inter/500.css'
+import '@fontsource/inter/600.css'
+import '@fontsource/inter/700.css'
 
 export const metadata = {
   title: 'ApplyAFK - Never Miss a New Role',
@@ -17,7 +18,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>{children}</body>
+      <body style={{ fontFamily: 'Inter, sans-serif' }}>{children}</body>
     </html>
   )
 }

@@ -22,9 +22,11 @@ interface StepEducationProps {
   onNext: (data: EducationData) => void
   onBack: () => void
   loading?: boolean
+  mode?: 'onboarding' | 'edit'
+  onSave?: (data: EducationData) => void
 }
 
-export function StepEducation({ initialData, onNext, onBack, loading }: StepEducationProps) {
+export function StepEducation({ initialData, onNext, onBack, loading, mode = 'onboarding', onSave }: StepEducationProps) {
   const [entries, setEntries] = useState<EducationEntry[]>(
     initialData?.education && initialData.education.length > 0
       ? initialData.education
@@ -103,7 +105,12 @@ export function StepEducation({ initialData, onNext, onBack, loading }: StepEduc
     e.preventDefault()
     if (validateForm()) {
       const filledEntries = entries.filter((entry) => entry.school.trim() || entry.degree)
-      onNext({ education: filledEntries })
+      const data = { education: filledEntries }
+      if (mode === 'edit' && onSave) {
+        onSave(data)
+      } else {
+        onNext(data)
+      }
     }
   }
 
@@ -119,18 +126,7 @@ export function StepEducation({ initialData, onNext, onBack, loading }: StepEduc
     return parts.join(' in ')
   }
 
-  return (
-    <Card className="max-w-3xl mx-auto shadow-lg border-0 bg-card/80 backdrop-blur">
-      <CardHeader className="text-center pb-2">
-        <div className="mx-auto w-14 h-14 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center mb-4">
-          <GraduationCap className="h-7 w-7 text-primary" />
-        </div>
-        <CardTitle className="text-2xl">Education</CardTitle>
-        <CardDescription className="text-base">
-          Add your educational background
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="pt-4">
+  const formContent = (
         <form onSubmit={handleSubmit} className="space-y-4">
           <AnimatePresence mode="popLayout">
             {entries.map((entry) => {
@@ -342,14 +338,46 @@ export function StepEducation({ initialData, onNext, onBack, loading }: StepEduc
           </Button>
 
           <div className="flex justify-between pt-6">
-            <Button type="button" variant="ghost" onClick={onBack} disabled={loading}>
-              Back
-            </Button>
-            <Button type="submit" disabled={loading} className="px-8">
-              {loading ? 'Saving...' : 'Continue'}
-            </Button>
+            {mode === 'edit' ? (
+              <>
+                <Button type="button" variant="ghost" onClick={onBack} disabled={loading}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={loading} className="px-8">
+                  {loading ? 'Saving...' : 'Save Changes'}
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button type="button" variant="ghost" onClick={onBack} disabled={loading}>
+                  Back
+                </Button>
+                <Button type="submit" disabled={loading} className="px-8">
+                  {loading ? 'Saving...' : 'Continue'}
+                </Button>
+              </>
+            )}
           </div>
         </form>
+  )
+
+  if (mode === 'edit') {
+    return formContent
+  }
+
+  return (
+    <Card className="max-w-3xl mx-auto shadow-lg border-0 bg-card/80 backdrop-blur">
+      <CardHeader className="text-center pb-2">
+        <div className="mx-auto w-14 h-14 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center mb-4">
+          <GraduationCap className="h-7 w-7 text-primary" />
+        </div>
+        <CardTitle className="text-2xl">Education</CardTitle>
+        <CardDescription className="text-base">
+          Add your educational background
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="pt-4">
+        {formContent}
       </CardContent>
     </Card>
   )

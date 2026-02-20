@@ -108,7 +108,7 @@ export default async function SettingsPage() {
                   </p>
                   <p className="text-sm text-muted-foreground mt-1">
                     {(profile?.subscription_status === 'active' || profile?.subscription_status === 'trialing')
-                      ? '$2/month — Unlimited applications'
+                      ? '$3.99/month — Unlimited applications'
                       : 'Subscribe to access all features'}
                   </p>
                 </div>

@@ -31,6 +31,8 @@ interface StepSkillsAndProjectsProps {
   onNext: (data: SkillsProjectsData) => void
   onBack: () => void
   loading?: boolean
+  mode?: 'onboarding' | 'edit'
+  onSave?: (data: SkillsProjectsData) => void
 }
 
 export function StepSkillsAndProjects({
@@ -38,6 +40,8 @@ export function StepSkillsAndProjects({
   onNext,
   onBack,
   loading,
+  mode = 'onboarding',
+  onSave,
 }: StepSkillsAndProjectsProps) {
   const [skills, setSkills] = useState<string[]>(initialData?.skills || [])
   const [projects, setProjects] = useState<ProjectEntry[]>(
@@ -94,7 +98,12 @@ export function StepSkillsAndProjects({
     e.preventDefault()
     if (validateForm()) {
       const filledProjects = projects.filter((p) => p.name.trim())
-      onNext({ skills, projects: filledProjects })
+      const data = { skills, projects: filledProjects }
+      if (mode === 'edit' && onSave) {
+        onSave(data)
+      } else {
+        onNext(data)
+      }
     }
   }
 
@@ -110,18 +119,7 @@ export function StepSkillsAndProjects({
     return project.description ? project.description.slice(0, 50) + '...' : ''
   }
 
-  return (
-    <Card className="max-w-3xl mx-auto shadow-lg border-0 bg-card/80 backdrop-blur">
-      <CardHeader className="text-center pb-2">
-        <div className="mx-auto w-14 h-14 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center mb-4">
-          <Wrench className="h-7 w-7 text-primary" />
-        </div>
-        <CardTitle className="text-2xl">Skills & Projects</CardTitle>
-        <CardDescription className="text-base">
-          Highlight your technical skills and showcase your best projects
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="pt-4">
+  const formContent = (
         <form onSubmit={handleSubmit} className="space-y-8">
           {/* Skills Section */}
           <div className="space-y-4">
@@ -288,14 +286,46 @@ export function StepSkillsAndProjects({
           </div>
 
           <div className="flex justify-between pt-6">
-            <Button type="button" variant="ghost" onClick={onBack} disabled={loading}>
-              Back
-            </Button>
-            <Button type="submit" disabled={loading} className="px-8">
-              {loading ? 'Saving...' : 'Continue'}
-            </Button>
+            {mode === 'edit' ? (
+              <>
+                <Button type="button" variant="ghost" onClick={onBack} disabled={loading}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={loading} className="px-8">
+                  {loading ? 'Saving...' : 'Save Changes'}
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button type="button" variant="ghost" onClick={onBack} disabled={loading}>
+                  Back
+                </Button>
+                <Button type="submit" disabled={loading} className="px-8">
+                  {loading ? 'Saving...' : 'Continue'}
+                </Button>
+              </>
+            )}
           </div>
         </form>
+  )
+
+  if (mode === 'edit') {
+    return formContent
+  }
+
+  return (
+    <Card className="max-w-3xl mx-auto shadow-lg border-0 bg-card/80 backdrop-blur">
+      <CardHeader className="text-center pb-2">
+        <div className="mx-auto w-14 h-14 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center mb-4">
+          <Wrench className="h-7 w-7 text-primary" />
+        </div>
+        <CardTitle className="text-2xl">Skills & Projects</CardTitle>
+        <CardDescription className="text-base">
+          Highlight your technical skills and showcase your best projects
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="pt-4">
+        {formContent}
       </CardContent>
     </Card>
   )
