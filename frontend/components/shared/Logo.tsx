@@ -1,13 +1,17 @@
 import Link from "next/link"
-import { Zap } from "lucide-react"
+import Image from "next/image"
 
 export function Logo({ className }: { className?: string }) {
   return (
     <Link href="/" className={className}>
-      <div className="flex items-center gap-2 group">
-        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-lg group-hover:shadow-glow transition-shadow duration-300">
-          <Zap className="w-5 h-5 text-white" />
-        </div>
+      <div className="flex items-center gap-2.5 group">
+        <Image
+          src="/logo.png"
+          alt="ApplyAFK"
+          width={36}
+          height={24}
+          className="group-hover:brightness-110 transition-all duration-200"
+        />
         <span className="text-xl font-bold">
           <span className="text-foreground">Apply</span>
           <span className="text-gradient">AFK</span>

@@ -4,12 +4,13 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Logo } from "@/components/shared/Logo"
+import { LayoutDashboard, FileText, User, Settings, type LucideIcon } from "lucide-react"
 
-const navigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: '📊' },
-  { name: 'Applications', href: '/dashboard/applications', icon: '📝' },
-  { name: 'Profile', href: '/dashboard/profile', icon: '👤' },
-  { name: 'Settings', href: '/dashboard/settings', icon: '⚙️' },
+const navigation: { name: string; href: string; icon: LucideIcon }[] = [
+  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { name: 'Applications', href: '/dashboard/applications', icon: FileText },
+  { name: 'Profile', href: '/dashboard/profile', icon: User },
+  { name: 'Settings', href: '/dashboard/settings', icon: Settings },
 ]
 
 export function Sidebar() {
@@ -36,7 +37,7 @@ export function Sidebar() {
                       : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   )}
                 >
-                  <span className="mr-3 text-lg">{item.icon}</span>
+                  <item.icon className="mr-3 h-4 w-4 flex-shrink-0" />
                   {item.name}
                 </Link>
               )

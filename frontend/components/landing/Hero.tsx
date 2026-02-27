@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
-import { ArrowRight, Sparkles, Zap, Clock } from "lucide-react"
+import { ArrowRight, Zap, Clock, Sparkles } from "lucide-react"
 import { useState, useEffect, useCallback } from "react"
 
 const taglines = [
@@ -111,18 +111,6 @@ export function Hero() {
       {/* Content */}
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         <div className="text-center max-w-5xl mx-auto pt-20">
-          {/* Badge */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.2 }}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass mb-8 text-sm font-medium text-muted-foreground"
-          >
-            <Sparkles className="w-4 h-4 text-primary" />
-            <span>AI-Powered Job Applications</span>
-            <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse" />
-          </motion.div>
-
           {/* Main Headline - Static line */}
           <motion.h1
             initial={{ opacity: 0, y: 30 }}
