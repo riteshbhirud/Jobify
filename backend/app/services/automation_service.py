@@ -467,6 +467,161 @@ def build_job_info(job: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def get_browserbase_proxy_settings() -> Dict[str, Any]:
+    """
+    Resolve BrowserBase proxy configuration for a Webshare external proxy.
+    """
+    enabled = bool(
+        getattr(settings, "browserbase_webshare_proxy_enabled", False)
+        or os.getenv("BROWSERBASE_WEBSHARE_PROXY_ENABLED", "").lower() == "true"
+    )
+
+    if not enabled:
+        return {
+            "enabled": False,
+            "mode": "none",
+            "proxies": None,
+            "server": None,
+        }
+
+    scheme = getattr(settings, "browserbase_webshare_proxy_scheme", None) or os.getenv("BROWSERBASE_WEBSHARE_PROXY_SCHEME", "http")
+    host = getattr(settings, "browserbase_webshare_proxy_host", None) or os.getenv("BROWSERBASE_WEBSHARE_PROXY_HOST")
+    port = getattr(settings, "browserbase_webshare_proxy_port", None) or os.getenv("BROWSERBASE_WEBSHARE_PROXY_PORT")
+    username = getattr(settings, "browserbase_webshare_proxy_username", None) or os.getenv("BROWSERBASE_WEBSHARE_PROXY_USERNAME")
+    password = getattr(settings, "browserbase_webshare_proxy_password", None) or os.getenv("BROWSERBASE_WEBSHARE_PROXY_PASSWORD")
+    domain_pattern = getattr(settings, "browserbase_webshare_proxy_domain_pattern", None) or os.getenv("BROWSERBASE_WEBSHARE_PROXY_DOMAIN_PATTERN")
+    webshare_api_key = getattr(settings, "webshare_api_key", None) or os.getenv("WEBSHARE_API_KEY")
+    webshare_proxy_mode = (getattr(settings, "webshare_proxy_mode", None) or os.getenv("WEBSHARE_PROXY_MODE", "direct")).lower()
+    webshare_proxy_country_code = getattr(settings, "webshare_proxy_country_code", None) or os.getenv("WEBSHARE_PROXY_COUNTRY_CODE")
+    webshare_proxy_plan_id = getattr(settings, "webshare_proxy_plan_id", None) or os.getenv("WEBSHARE_PROXY_PLAN_ID")
+
+    if webshare_api_key:
+        resolved_host, resolved_port, resolved_username, resolved_password = fetch_webshare_proxy_credentials(
+            api_key=webshare_api_key,
+            mode=webshare_proxy_mode,
+            country_code=webshare_proxy_country_code,
+            plan_id=webshare_proxy_plan_id,
+        )
+        server = f"{scheme}://{resolved_host}:{resolved_port}"
+        proxy: Dict[str, Any] = {
+            "type": "external",
+            "server": server,
+            "username": resolved_username,
+            "password": resolved_password,
+        }
+        if domain_pattern:
+            proxy["domainPattern"] = domain_pattern
+
+        return {
+            "enabled": True,
+            "mode": f"webshare-{webshare_proxy_mode}-api",
+            "proxies": [proxy],
+            "server": server,
+            "username": resolved_username,
+            "password": resolved_password,
+        }
+
+    if not (host and port and username and password):
+        missing_fields = [
+            field_name
+            for field_name, field_value in (
+                ("BROWSERBASE_WEBSHARE_PROXY_HOST", host),
+                ("BROWSERBASE_WEBSHARE_PROXY_PORT", port),
+                ("BROWSERBASE_WEBSHARE_PROXY_USERNAME", username),
+                ("BROWSERBASE_WEBSHARE_PROXY_PASSWORD", password),
+                ("WEBSHARE_API_KEY", webshare_api_key),
+            )
+            if not field_value
+        ]
+        raise ValueError(
+            "Webshare proxy is enabled but missing required settings: "
+            + ", ".join(missing_fields)
+        )
+
+    server = f"{scheme}://{host}:{port}"
+    proxy: Dict[str, Any] = {
+        "type": "external",
+        "server": server,
+        "username": username,
+        "password": password,
+    }
+    if domain_pattern:
+        proxy["domainPattern"] = domain_pattern
+
+    return {
+        "enabled": True,
+        "mode": "webshare-explicit",
+        "proxies": [proxy],
+        "server": server,
+        "username": username,
+        "password": password,
+    }
+
+
+def fetch_webshare_proxy_credentials(
+    api_key: str,
+    mode: str = "direct",
+    country_code: Optional[str] = None,
+    plan_id: Optional[str] = None,
+) -> Tuple[str, int, str, str]:
+    """
+    Fetch one working proxy from the Webshare Proxy List API.
+
+    Official docs:
+    - https://apidocs.webshare.io/proxy-list
+    - https://apidocs.webshare.io/proxy-list/list
+    """
+    import requests
+
+    if mode not in {"direct", "backbone"}:
+        raise ValueError("WEBSHARE_PROXY_MODE must be either 'direct' or 'backbone'")
+
+    params: Dict[str, Any] = {
+        "mode": mode,
+        "page": 1,
+        "page_size": 10,
+    }
+    if country_code:
+        params["country_code__in"] = country_code.upper()
+    if plan_id:
+        params["plan_id"] = plan_id
+    if mode == "direct":
+        params["valid"] = "true"
+
+    response = requests.get(
+        "https://proxy.webshare.io/api/v2/proxy/list/",
+        headers={"Authorization": f"Token {api_key}"},
+        params=params,
+        timeout=15,
+    )
+    response.raise_for_status()
+
+    payload = response.json()
+    results = payload.get("results") or []
+    if not results:
+        raise ValueError("Webshare API returned no proxies for the requested filters")
+
+    proxy = next((item for item in results if item.get("username") and item.get("password")), None)
+    if not proxy:
+        raise ValueError("Webshare API returned proxies, but none included username/password credentials")
+
+    username = proxy.get("username")
+    password = proxy.get("password")
+    proxy_address = proxy.get("proxy_address")
+    port = proxy.get("port")
+
+    if mode == "direct":
+        if not proxy_address or not port:
+            raise ValueError("Webshare direct proxy response is missing proxy_address or port")
+        return proxy_address, int(port), username, password
+
+    # Webshare backbone mode uses p.webshare.io as the connection address.
+    # Port is sometimes plan-dependent, so prefer the API value when present.
+    if not port:
+        port = 80
+    return "p.webshare.io", int(port), username, password
+
+
 async def create_browserbase_session() -> Optional[Dict[str, Any]]:
     """
     Create a BrowserBase session for cloud browser automation.
@@ -483,17 +638,339 @@ async def create_browserbase_session() -> Optional[Dict[str, Any]]:
         from browserbase import Browserbase
 
         bb = Browserbase(api_key=browserbase_api_key)
-        session = bb.sessions.create(project_id=browserbase_project_id)
+        proxy_settings = get_browserbase_proxy_settings()
+        session_kwargs: Dict[str, Any] = {
+            "project_id": browserbase_project_id,
+        }
 
-        logger.info(f"Created BrowserBase session: {session.id}")
+        if proxy_settings["enabled"]:
+            session_kwargs["proxies"] = proxy_settings["proxies"]
+            logger.info(
+                "Creating BrowserBase session with proxy mode=%s server=%s",
+                proxy_settings["mode"],
+                proxy_settings["server"],
+            )
+        else:
+            logger.info("Creating BrowserBase session without proxies")
+
+        session = bb.sessions.create(**session_kwargs)
+
+        logger.info(
+            "Created BrowserBase session: %s proxy_enabled=%s proxy_mode=%s proxy_server=%s",
+            session.id,
+            proxy_settings["enabled"],
+            proxy_settings["mode"],
+            proxy_settings["server"],
+        )
 
         return {
             "id": session.id,
             "connect_url": session.connect_url,
+            "proxy_mode": proxy_settings["mode"],
+            "proxy_enabled": proxy_settings["enabled"],
+            "proxy_server": proxy_settings["server"],
         }
     except Exception as e:
         logger.error(f"Failed to create BrowserBase session: {e}")
         return None
+
+
+def get_local_playwright_proxy_settings() -> Dict[str, Any]:
+    """
+    Resolve Playwright proxy settings for local Chromium runs.
+    Reuses the same Webshare configuration as the BrowserBase path.
+    """
+    proxy_settings = get_browserbase_proxy_settings()
+    if not proxy_settings["enabled"]:
+        return {
+            "enabled": False,
+            "mode": "none",
+            "proxy": None,
+            "server": None,
+        }
+
+    return {
+        "enabled": True,
+        "mode": proxy_settings["mode"],
+        "server": proxy_settings["server"],
+        "proxy": {
+            "server": proxy_settings["server"],
+            "username": proxy_settings.get("username"),
+            "password": proxy_settings.get("password"),
+        },
+    }
+
+
+def get_local_browser_launch_settings() -> Dict[str, Any]:
+    """
+    Resolve whether local Playwright should use bundled Chromium, channel=chrome,
+    or a specific local Chrome executable.
+    """
+    executable_path = getattr(settings, "local_browser_executable_path", None) or os.getenv("LOCAL_BROWSER_EXECUTABLE_PATH")
+    channel = getattr(settings, "local_browser_channel", None) or os.getenv("LOCAL_BROWSER_CHANNEL")
+
+    if executable_path:
+        return {
+            "browser_name": "Google Chrome",
+            "launch_overrides": {"executable_path": executable_path},
+        }
+
+    if channel:
+        return {
+            "browser_name": f"channel={channel}",
+            "launch_overrides": {"channel": channel},
+        }
+
+    return {
+        "browser_name": "bundled Chromium",
+        "launch_overrides": {},
+    }
+
+
+def get_local_browser_cdp_url() -> Optional[str]:
+    """Resolve an externally launched Chrome CDP endpoint, if configured."""
+    return getattr(settings, "local_browser_cdp_url", None) or os.getenv("LOCAL_BROWSER_CDP_URL")
+
+
+def get_local_browser_user_data_dir() -> str:
+    """
+    Resolve the persistent Chrome profile directory for local Playwright runs.
+    """
+    configured_dir = getattr(settings, "local_browser_user_data_dir", None) or os.getenv("LOCAL_BROWSER_USER_DATA_DIR")
+    if configured_dir:
+        return configured_dir
+
+    default_dir = Path(__file__).parent.parent.parent / ".playwright-user-data" / "chrome-profile"
+    default_dir.mkdir(parents=True, exist_ok=True)
+    return str(default_dir)
+
+
+def get_local_browser_context_settings() -> Dict[str, Any]:
+    """
+    Use a more realistic default browser context for local runs.
+    """
+    return {
+        "viewport": {"width": 1440, "height": 900},
+        "screen": {"width": 1440, "height": 900},
+        "locale": "en-US",
+        "timezone_id": "America/New_York",
+        "color_scheme": "light",
+        "device_scale_factor": 2,
+        "has_touch": False,
+        "is_mobile": False,
+        "user_agent": (
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/123.0.0.0 Safari/537.36"
+        ),
+    }
+
+
+async def apply_local_browser_stealth(context: Any) -> None:
+    """
+    Best-effort fingerprint hardening for local Playwright-driven Chrome.
+    This reduces obvious automation indicators but does not guarantee stealth.
+    """
+    await context.add_init_script(
+        """
+        (() => {
+          const override = (obj, prop, value) => {
+            try {
+              Object.defineProperty(obj, prop, {
+                get: () => value,
+                configurable: true
+              });
+            } catch (e) {}
+          };
+
+          override(Navigator.prototype, 'webdriver', undefined);
+          override(Navigator.prototype, 'platform', 'MacIntel');
+          override(Navigator.prototype, 'language', 'en-US');
+          override(Navigator.prototype, 'languages', ['en-US', 'en']);
+          override(Navigator.prototype, 'hardwareConcurrency', 8);
+          override(Navigator.prototype, 'deviceMemory', 8);
+
+          if (!window.chrome) {
+            Object.defineProperty(window, 'chrome', {
+              value: { runtime: {} },
+              configurable: true
+            });
+          }
+
+          const originalQuery = window.navigator.permissions && window.navigator.permissions.query;
+          if (originalQuery) {
+            window.navigator.permissions.query = (parameters) => (
+              parameters && parameters.name === 'notifications'
+                ? Promise.resolve({ state: Notification.permission })
+                : originalQuery(parameters)
+            );
+          }
+
+          Object.defineProperty(WebGLRenderingContext.prototype, 'getParameter', {
+            value: new Proxy(WebGLRenderingContext.prototype.getParameter, {
+              apply(target, thisArg, args) {
+                const param = args && args[0];
+                if (param === 37445) return 'Intel Inc.';
+                if (param === 37446) return 'Intel Iris OpenGL Engine';
+                return Reflect.apply(target, thisArg, args);
+              }
+            }),
+            configurable: true
+          });
+        })();
+        """
+    )
+
+
+async def launch_local_browser(
+    playwright: Any,
+    headless: bool,
+    log_prefix: str = "",
+) -> Tuple[Any, Any, Any, bool, bool]:
+    """
+    Launch or connect to local Chrome/Chromium with proxy, stealth, and optional persistent profile.
+
+    Returns:
+        Tuple of (browser_or_none, context, page, persistent_profile_enabled, externally_managed_browser)
+    """
+    local_proxy_settings = get_local_playwright_proxy_settings()
+    local_browser_settings = get_local_browser_launch_settings()
+    local_browser_cdp_url = get_local_browser_cdp_url()
+    persistent_profile_enabled = bool(
+        getattr(settings, "local_browser_persistent_profile_enabled", True)
+        or os.getenv("LOCAL_BROWSER_PERSISTENT_PROFILE_ENABLED", "").lower() == "true"
+    )
+
+    if local_browser_cdp_url:
+        logger.info(
+            "%sConnecting to externally launched Chrome via CDP url=%s",
+            log_prefix,
+            local_browser_cdp_url,
+        )
+        if local_proxy_settings["enabled"]:
+            logger.info(
+                "%sNote: Webshare proxy settings from the app are not injected into an externally launched Chrome. "
+                "If you want proxying in CDP mode, launch Chrome itself with the proxy configured.",
+                log_prefix,
+            )
+
+        browser = await playwright.chromium.connect_over_cdp(local_browser_cdp_url)
+        context = browser.contexts[0] if browser.contexts else await browser.new_context(**get_local_browser_context_settings())
+        await apply_local_browser_stealth(context)
+        page = await context.new_page()
+        await log_context_egress_ip(
+            context=context,
+            proxy_enabled=local_proxy_settings["enabled"],
+            proxy_mode="external-cdp",
+            proxy_server=local_proxy_settings["server"],
+            log_prefix=log_prefix,
+        )
+        return browser, context, page, False, True
+
+    logger.info(
+        "%sUsing local browser=%s with proxy_enabled=%s mode=%s server=%s persistent_profile=%s",
+        log_prefix,
+        local_browser_settings["browser_name"],
+        local_proxy_settings["enabled"],
+        local_proxy_settings["mode"],
+        local_proxy_settings["server"],
+        persistent_profile_enabled,
+    )
+
+    launch_kwargs: Dict[str, Any] = {
+        "headless": headless,
+        "slow_mo": 100,
+        "args": [
+            "--disable-blink-features=AutomationControlled",
+            "--disable-features=IsolateOrigins,site-per-process",
+            "--no-first-run",
+            "--no-default-browser-check",
+            "--disable-dev-shm-usage",
+        ],
+    }
+    launch_kwargs.update(local_browser_settings["launch_overrides"])
+    if local_proxy_settings["enabled"]:
+        launch_kwargs["proxy"] = local_proxy_settings["proxy"]
+
+    if persistent_profile_enabled:
+        user_data_dir = get_local_browser_user_data_dir()
+        logger.info("%sLocal browser persistent profile dir=%s", log_prefix, user_data_dir)
+        context = await playwright.chromium.launch_persistent_context(
+            user_data_dir=user_data_dir,
+            **launch_kwargs,
+            **get_local_browser_context_settings(),
+        )
+        await apply_local_browser_stealth(context)
+        page = context.pages[0] if context.pages else await context.new_page()
+        await log_context_egress_ip(
+            context=context,
+            proxy_enabled=local_proxy_settings["enabled"],
+            proxy_mode=local_proxy_settings["mode"],
+            proxy_server=local_proxy_settings["server"],
+            log_prefix=log_prefix,
+        )
+        return None, context, page, True, False
+
+    browser = await playwright.chromium.launch(**launch_kwargs)
+    context = await browser.new_context(**get_local_browser_context_settings())
+    await apply_local_browser_stealth(context)
+    page = await context.new_page()
+    await log_context_egress_ip(
+        context=context,
+        proxy_enabled=local_proxy_settings["enabled"],
+        proxy_mode=local_proxy_settings["mode"],
+        proxy_server=local_proxy_settings["server"],
+        log_prefix=log_prefix,
+    )
+    return browser, context, page, False, False
+
+
+async def log_context_egress_ip(
+    context: Any,
+    proxy_enabled: bool,
+    proxy_mode: str,
+    proxy_server: Optional[str],
+    log_prefix: str = "",
+) -> None:
+    """
+    Best-effort check of the public IP seen from inside a browser context.
+    This is only for observability and should never break automation.
+    """
+    try:
+        response = await context.request.get(
+            "https://api.ipify.org?format=json",
+            timeout=15000,
+        )
+        if not response.ok:
+            logger.warning(
+                "%sBrowser egress IP check failed with status=%s proxy_enabled=%s mode=%s server=%s",
+                log_prefix,
+                response.status,
+                proxy_enabled,
+                proxy_mode,
+                proxy_server,
+            )
+            return
+
+        payload = await response.json()
+        observed_ip = payload.get("ip")
+        logger.info(
+            "%sBrowser egress IP check: observed_ip=%s proxy_enabled=%s mode=%s server=%s",
+            log_prefix,
+            observed_ip,
+            proxy_enabled,
+            proxy_mode,
+            proxy_server,
+        )
+    except Exception as e:
+        logger.warning(
+            "%sBrowser egress IP check error: %s proxy_enabled=%s mode=%s server=%s",
+            log_prefix,
+            e,
+            proxy_enabled,
+            proxy_mode,
+            proxy_server,
+        )
 
 
 async def run_application_pipeline(
@@ -628,6 +1105,8 @@ async def run_application_pipeline(
             browser = None
             context = None
             page = None
+            persistent_local_context = False
+            externally_managed_browser = False
 
             try:
                 if use_browserbase:
@@ -636,6 +1115,13 @@ async def run_application_pipeline(
 
                     if browserbase_session:
                         logger.info(f"Connecting to BrowserBase session: {browserbase_session['id']}")
+                        logger.info(
+                            "%sBrowserBase proxy configuration: enabled=%s mode=%s server=%s",
+                            log_prefix,
+                            browserbase_session.get("proxy_enabled"),
+                            browserbase_session.get("proxy_mode"),
+                            browserbase_session.get("proxy_server"),
+                        )
 
                         # Connect to BrowserBase via CDP
                         browser = await p.chromium.connect_over_cdp(browserbase_session["connect_url"])
@@ -644,23 +1130,31 @@ async def run_application_pipeline(
                         context = browser.contexts[0]
                         page = context.pages[0] if context.pages else await context.new_page()
 
-                        logger.info("Successfully connected to BrowserBase")
+                        logger.info(
+                            "%sSuccessfully connected to BrowserBase session %s with proxy_enabled=%s mode=%s server=%s",
+                            log_prefix,
+                            browserbase_session["id"],
+                            browserbase_session.get("proxy_enabled"),
+                            browserbase_session.get("proxy_mode"),
+                            browserbase_session.get("proxy_server"),
+                        )
+                        await log_context_egress_ip(
+                            context=context,
+                            proxy_enabled=browserbase_session.get("proxy_enabled", False),
+                            proxy_mode=browserbase_session.get("proxy_mode", "none"),
+                            proxy_server=browserbase_session.get("proxy_server"),
+                            log_prefix=log_prefix,
+                        )
                     else:
                         logger.warning("BrowserBase not available, falling back to local browser")
                         use_browserbase = False
 
                 if not use_browserbase or not browser:
-                    # Fall back to local browser
-                    logger.info("Using local Chromium browser")
-                    browser = await p.chromium.launch(
+                    browser, context, page, persistent_local_context, externally_managed_browser = await launch_local_browser(
+                        playwright=p,
                         headless=headless,
-                        slow_mo=100  # Human-like delays
+                        log_prefix=log_prefix,
                     )
-                    context = await browser.new_context(
-                        viewport={"width": 1920, "height": 1080},
-                        user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                    )
-                    page = await context.new_page()
 
                 # Create pipeline instance
                 pipeline = pipeline_class(
@@ -677,8 +1171,10 @@ async def run_application_pipeline(
 
             finally:
                 # Close browser
-                if browser:
+                if browser and not externally_managed_browser:
                     await browser.close()
+                elif persistent_local_context and context:
+                    await context.close()
 
                 # Clean up temporary resume file
                 if temp_resume_path:
@@ -1184,6 +1680,8 @@ async def run_test_pipeline(
         browser = None
         context = None
         page = None
+        persistent_local_context = False
+        externally_managed_browser = False
 
         try:
             if use_browserbase:
@@ -1191,25 +1689,39 @@ async def run_test_pipeline(
 
                 if browserbase_session:
                     logger.info(f"[TEST] Connecting to BrowserBase session: {browserbase_session['id']}")
+                    logger.info(
+                        "[TEST] BrowserBase proxy configuration: enabled=%s mode=%s server=%s",
+                        browserbase_session.get("proxy_enabled"),
+                        browserbase_session.get("proxy_mode"),
+                        browserbase_session.get("proxy_server"),
+                    )
                     browser = await p.chromium.connect_over_cdp(browserbase_session["connect_url"])
                     context = browser.contexts[0]
                     page = context.pages[0] if context.pages else await context.new_page()
-                    logger.info("[TEST] Successfully connected to BrowserBase")
+                    logger.info(
+                        "[TEST] Successfully connected to BrowserBase session %s with proxy_enabled=%s mode=%s server=%s",
+                        browserbase_session["id"],
+                        browserbase_session.get("proxy_enabled"),
+                        browserbase_session.get("proxy_mode"),
+                        browserbase_session.get("proxy_server"),
+                    )
+                    await log_context_egress_ip(
+                        context=context,
+                        proxy_enabled=browserbase_session.get("proxy_enabled", False),
+                        proxy_mode=browserbase_session.get("proxy_mode", "none"),
+                        proxy_server=browserbase_session.get("proxy_server"),
+                        log_prefix="[TEST] ",
+                    )
                 else:
                     logger.warning("[TEST] BrowserBase not available, falling back to local browser")
                     use_browserbase = False
 
             if not use_browserbase or not browser:
-                logger.info(f"[TEST] Using local Chromium browser (headless={headless})")
-                browser = await p.chromium.launch(
+                browser, context, page, persistent_local_context, externally_managed_browser = await launch_local_browser(
+                    playwright=p,
                     headless=headless,
-                    slow_mo=100
+                    log_prefix="[TEST] ",
                 )
-                context = await browser.new_context(
-                    viewport={"width": 1920, "height": 1080},
-                    user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                )
-                page = await context.new_page()
 
             # Create pipeline instance
             pipeline = pipeline_class(
@@ -1228,8 +1740,10 @@ async def run_test_pipeline(
             if keep_browser_open:
                 logger.info("[TEST] Keeping browser open for debugging. You must close it manually.")
             else:
-                if browser:
+                if browser and not externally_managed_browser:
                     await browser.close()
+                elif persistent_local_context and context:
+                    await context.close()
                 await p.stop()
             if temp_resume_path:
                 cleanup_temp_file(temp_resume_path)

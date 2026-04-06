@@ -18,6 +18,7 @@ from app.services.automation_service import (
     process_queued_applications,
     detect_ats_platform,
     is_browserbase_configured,
+    get_browserbase_proxy_settings,
     ATS_DOMAINS
 )
 
@@ -30,12 +31,19 @@ async def get_automation_config():
     """
     Get automation configuration status including BrowserBase availability.
     """
+    proxy_settings = get_browserbase_proxy_settings()
+
     return {
         "success": True,
         "browserbase": {
             "configured": is_browserbase_configured(),
             "enabled": True,
-            "description": "Cloud browser automation via BrowserBase"
+            "description": "Cloud browser automation via BrowserBase",
+            "proxy": {
+                "enabled": proxy_settings["enabled"],
+                "mode": proxy_settings["mode"],
+                "server": proxy_settings["server"],
+            }
         },
         "local_browser": {
             "available": True,

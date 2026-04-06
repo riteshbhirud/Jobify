@@ -18,6 +18,22 @@ class Settings(BaseSettings):
     # BrowserBase settings for cloud browser automation
     browserbase_api_key: Optional[str] = None
     browserbase_project_id: Optional[str] = None
+    browserbase_webshare_proxy_enabled: bool = False
+    browserbase_webshare_proxy_scheme: str = "http"
+    browserbase_webshare_proxy_host: Optional[str] = None
+    browserbase_webshare_proxy_port: Optional[int] = None
+    browserbase_webshare_proxy_username: Optional[str] = None
+    browserbase_webshare_proxy_password: Optional[str] = None
+    browserbase_webshare_proxy_domain_pattern: Optional[str] = None
+    webshare_api_key: Optional[str] = None
+    webshare_proxy_mode: str = "direct"
+    webshare_proxy_country_code: Optional[str] = None
+    webshare_proxy_plan_id: Optional[str] = None
+    local_browser_channel: Optional[str] = None
+    local_browser_executable_path: Optional[str] = None
+    local_browser_cdp_url: Optional[str] = None
+    local_browser_persistent_profile_enabled: bool = True
+    local_browser_user_data_dir: Optional[str] = None
 
     # Stripe settings
     stripe_secret_key: str = ""
