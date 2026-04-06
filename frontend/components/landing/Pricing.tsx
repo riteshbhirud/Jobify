@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
-import { Check, Rocket, ArrowRight } from "lucide-react"
+import { Check, ArrowRight } from "lucide-react"
 
 const features = [
   "Unlimited job applications",
@@ -74,9 +74,6 @@ export function Pricing() {
             <div className="p-10 rounded-3xl glass border-2 border-primary/50 shadow-glow hover:shadow-glow-lg transition-all duration-500">
               {/* Plan header */}
               <div className="text-center mb-8">
-                <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center mb-5 shadow-lg">
-                  <Rocket className="w-8 h-8 text-white" />
-                </div>
                 <h3 className="text-2xl font-bold text-foreground mb-1">
                   Full Access
                 </h3>
